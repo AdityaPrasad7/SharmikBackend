@@ -1,0 +1,137 @@
+import Joi from "joi";
+
+// Common schemas
+const phoneSchema = Joi.string()
+  .pattern(/^[6-9]\d{9}$/)
+  .required()
+  .messages({
+    "string.pattern.base": "Phone number must be a valid 10-digit Indian mobile number",
+    "any.required": "Phone number is required",
+  });
+
+const otpSchema = Joi.string()
+  .length(4)
+  .pattern(/^\d{4}$/)
+  .required()
+  .messages({
+    "string.length": "OTP must be exactly 4 digits",
+    "string.pattern.base": "OTP must contain only digits",
+    "any.required": "OTP is required",
+  });
+
+const categorySchema = Joi.string()
+  .valid("Non-Degree Holder", "Diploma Holder", "ITI Holder")
+  .required();
+
+const stateSchema = Joi.string().trim().min(1).required();
+const citySchema = Joi.string().trim().min(1).required();
+
+// Send OTP Schema (category is optional here, will be sent in verify-otp)
+export const sendOTPSchema = Joi.object({
+  phone: phoneSchema,
+  category: categorySchema.optional(), // Optional in send-otp, required in verify-otp
+});
+
+// Verify OTP Schema (category is optional - required only for new registrations)
+export const verifyOTPSchema = Joi.object({
+  phone: phoneSchema,
+  otp: otpSchema,
+  category: categorySchema.optional(), // Optional - required only if user doesn't exist
+});
+
+// Non-Degree Holder Registration Schema
+export const nonDegreeRegistrationSchema = Joi.object({
+  phone: phoneSchema,
+  state: stateSchema,
+  city: citySchema,
+  specializationId: Joi.string()
+    .pattern(/^[0-9a-fA-F]{24}$/)
+    .required()
+    .messages({
+      "string.pattern.base": "Invalid specialization ID",
+      "any.required": "Specialization is required",
+    }),
+  selectedSkills: Joi.array()
+    .items(Joi.string().trim().min(1))
+    .min(1)
+    .required()
+    .messages({
+      "array.min": "At least one skill must be selected",
+      "any.required": "Skills are required",
+    }),
+});
+
+// Step 1 Registration Schema (Diploma/ITI Holder)
+export const step1RegistrationSchema = Joi.object({
+  phone: phoneSchema,
+  category: categorySchema,
+  // Files will be handled separately via multer
+});
+
+// Step 2 Registration Schema (Diploma/ITI Holder)
+export const step2RegistrationSchema = Joi.object({
+  phone: phoneSchema,
+  specializationId: Joi.string()
+    .pattern(/^[0-9a-fA-F]{24}$/)
+    .required()
+    .messages({
+      "string.pattern.base": "Invalid specialization ID",
+      "any.required": "Specialization is required",
+    }),
+  selectedSkills: Joi.array()
+    .items(Joi.string().trim().min(1))
+    .min(1)
+    .required()
+    .messages({
+      "array.min": "At least one skill must be selected",
+      "any.required": "Skills are required",
+    }),
+  questionAnswers: Joi.array()
+    .items(
+      Joi.object({
+        questionId: Joi.string().required(),
+        questionText: Joi.string().trim().required(),
+        selectedOption: Joi.string().trim().required(),
+        isCorrect: Joi.boolean().optional(),
+      })
+    )
+    .min(1)
+    .required()
+    .messages({
+      "array.min": "At least one question must be answered",
+      "any.required": "Question answers are required",
+    }),
+  role: Joi.string()
+    .valid("Worker", "Contractor", "Admin")
+    .default("Worker")
+    .optional(),
+});
+
+// Step 3 Registration Schema (Diploma/ITI Holder)
+export const step3RegistrationSchema = Joi.object({
+  phone: phoneSchema,
+  education: Joi.object({
+    collegeInstituteName: Joi.string().trim().min(1).required(),
+    city: Joi.string().trim().min(1).required(),
+    state: Joi.string().trim().min(1).required(),
+    yearOfPassing: Joi.string().trim().min(1).required(),
+    percentageOrGrade: Joi.string().trim().min(1).required(),
+  }).required(),
+  experienceStatus: Joi.object({
+    hasExperience: Joi.boolean().required(),
+    isFresher: Joi.boolean().required(),
+  }).required(),
+  // Files (resume, documents, experienceCertificate) will be handled via multer
+});
+
+// Get Specialization Skills Schema
+export const getSpecializationSkillsSchema = Joi.object({
+  specializationId: Joi.string()
+    .pattern(/^[0-9a-fA-F]{24}$/)
+    .required()
+    .messages({
+      "string.pattern.base": "Invalid specialization ID",
+      "any.required": "Specialization ID is required",
+    }),
+});
+

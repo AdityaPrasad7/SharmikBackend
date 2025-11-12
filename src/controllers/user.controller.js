@@ -1,4 +1,5 @@
 import { User } from "../models/users.model.js";
+import bcrypt from "bcryptjs";
 
 /* ---------------------------------------------------
    CREATE USER
@@ -52,6 +53,11 @@ export const getUserById = async (req, res) => {
 --------------------------------------------------- */
 export const updateUser = async (req, res) => {
   try {
+    if (req.body?.password) {
+      const salt = await bcrypt.genSalt(10);
+      req.body.password = await bcrypt.hash(req.body.password, salt);
+    }
+
     const updatedUser = await User.findByIdAndUpdate(req.params.id, req.body, {
       new: true,
     }).select("-password");

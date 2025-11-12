@@ -1,0 +1,297 @@
+{
+  "info": {
+    "name": "Job Seeker Registration APIs",
+    "description": "Complete API collection for Job Seeker Registration",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "1. OTP APIs",
+      "item": [
+        {
+          "name": "Send OTP",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"9876543210\",\n  \"category\": \"Non-Degree Holder\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:8000/api/job-seekers/send-otp",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8000",
+              "path": ["api", "job-seekers", "send-otp"]
+            }
+          }
+        },
+        {
+          "name": "Verify OTP",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"9876543210\",\n  \"otp\": \"1234\",\n  \"category\": \"Non-Degree Holder\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:8000/api/job-seekers/verify-otp",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8000",
+              "path": ["api", "job-seekers", "verify-otp"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Non-Degree Holder Registration",
+      "item": [
+        {
+          "name": "Complete Registration (Non-Degree)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "phone",
+                  "value": "9876543210",
+                  "type": "text"
+                },
+                {
+                  "key": "state",
+                  "value": "Maharashtra",
+                  "type": "text"
+                },
+                {
+                  "key": "city",
+                  "value": "Mumbai",
+                  "type": "text"
+                },
+                {
+                  "key": "skills",
+                  "value": "[\"WordPress\", \"MS Office / Google Workspace\", \"Graphic Design (Canva, Photoshop, Figma)\"]",
+                  "type": "text"
+                },
+                {
+                  "key": "aadhaarCard",
+                  "type": "file",
+                  "src": []
+                },
+                {
+                  "key": "profilePhoto",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            },
+            "url": {
+              "raw": "http://localhost:8000/api/job-seekers/register/non-degree",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8000",
+              "path": ["api", "job-seekers", "register", "non-degree"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Diploma/ITI Holder Registration",
+      "item": [
+        {
+          "name": "Step 1 - Upload Documents",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "phone",
+                  "value": "9876543210",
+                  "type": "text"
+                },
+                {
+                  "key": "category",
+                  "value": "Diploma Holder",
+                  "type": "text"
+                },
+                {
+                  "key": "aadhaarCard",
+                  "type": "file",
+                  "src": []
+                },
+                {
+                  "key": "profilePhoto",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            },
+            "url": {
+              "raw": "http://localhost:8000/api/job-seekers/register/step1",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8000",
+              "path": ["api", "job-seekers", "register", "step1"]
+            }
+          }
+        },
+        {
+          "name": "Step 2 - Select Trade, Skills & Questions",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"9876543210\",\n  \"specializationId\": \"507f1f77bcf86cd799439011\",\n  \"selectedSkills\": [\n    \"Electrical\",\n    \"Plumbing\",\n    \"Carpentry\"\n  ],\n  \"questionAnswers\": [\n    {\n      \"questionId\": \"q1\",\n      \"questionText\": \"What is the primary function of a circuit breaker?\",\n      \"selectedOption\": \"To interrupt current during overload\"\n    },\n    {\n      \"questionId\": \"q2\",\n      \"questionText\": \"Which tool is commonly used to measure electrical current?\",\n      \"selectedOption\": \"Ammeter\"\n    }\n  ],\n  \"role\": \"Worker\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:8000/api/job-seekers/register/step2",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8000",
+              "path": ["api", "job-seekers", "register", "step2"]
+            }
+          }
+        },
+        {
+          "name": "Step 3 - Education & Experience",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "phone",
+                  "value": "9876543210",
+                  "type": "text"
+                },
+                {
+                  "key": "education",
+                  "value": "{\"collegeInstituteName\": \"Government Polytechnic, Mumbai\", \"city\": \"Mumbai\", \"state\": \"Maharashtra\", \"yearOfPassing\": \"2023\", \"percentageOrGrade\": \"85%\"}",
+                  "type": "text"
+                },
+                {
+                  "key": "experienceStatus",
+                  "value": "{\"hasExperience\": false, \"isFresher\": true}",
+                  "type": "text"
+                },
+                {
+                  "key": "resume",
+                  "type": "file",
+                  "src": []
+                },
+                {
+                  "key": "experienceCertificate",
+                  "type": "file",
+                  "src": [],
+                  "disabled": true
+                },
+                {
+                  "key": "documents",
+                  "type": "file",
+                  "src": [],
+                  "disabled": true
+                }
+              ]
+            },
+            "url": {
+              "raw": "http://localhost:8000/api/job-seekers/register/step3",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8000",
+              "path": ["api", "job-seekers", "register", "step3"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Get Specializations & Skills",
+      "item": [
+        {
+          "name": "Get All Specializations",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:8000/api/job-seekers/specializations",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8000",
+              "path": ["api", "job-seekers", "specializations"]
+            }
+          }
+        },
+        {
+          "name": "Get Specialization with Skills & Questions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:8000/api/job-seekers/specialization/:specializationId",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8000",
+              "path": ["api", "job-seekers", "specialization", ":specializationId"],
+              "variable": [
+                {
+                  "key": "specializationId",
+                  "value": "507f1f77bcf86cd799439011"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Get Job Seeker Details",
+      "item": [
+        {
+          "name": "Get Job Seeker by Phone",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:8000/api/job-seekers/phone/:phone",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8000",
+              "path": ["api", "job-seekers", "phone", ":phone"],
+              "variable": [
+                {
+                  "key": "phone",
+                  "value": "9876543210"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
+

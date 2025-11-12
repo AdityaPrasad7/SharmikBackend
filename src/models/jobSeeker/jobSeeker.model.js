@@ -1,0 +1,148 @@
+import mongoose from "mongoose";
+
+const { Schema, model } = mongoose;
+
+const jobSeekerSchema = new Schema(
+  {
+    // Basic Information
+    phone: {
+      type: String,
+      required: true,
+      unique: true,
+      trim: true,
+      index: true,
+    },
+    phoneVerified: {
+      type: Boolean,
+      default: false,
+    },
+    category: {
+      type: String,
+      enum: ["Non-Degree Holder", "Diploma Holder", "ITI Holder"],
+      required: true,
+    },
+    role: {
+      type: String,
+      enum: ["Worker", "Contractor", "Admin"],
+      default: "Worker",
+    },
+
+    // Location
+    state: {
+      type: String,
+      trim: true,
+    },
+    city: {
+      type: String,
+      trim: true,
+    },
+
+    // Skills & Specialization
+    specializationId: {
+      type: Schema.Types.ObjectId,
+      ref: "Specialization",
+    },
+    skills: {
+      type: [String],
+      default: [],
+    },
+    selectedSkills: {
+      type: [String],
+      default: [],
+    },
+
+    // Question Answers (for Diploma/ITI holders)
+    questionAnswers: [
+      {
+        questionId: String, // Reference to question text or ID
+        questionText: String,
+        selectedOption: String,
+        isCorrect: Boolean, // Not required for validation, just stored
+      },
+    ],
+
+    // Documents
+    aadhaarCard: {
+      type: String, // File path or URL
+    },
+    profilePhoto: {
+      type: String, // File path or URL
+    },
+    resume: {
+      type: String, // File path or URL
+    },
+    experienceCertificate: {
+      type: String, // File path or URL (if experience status is true)
+    },
+    documents: [
+      {
+        type: String, // Array of file paths or URLs
+      },
+    ],
+
+    // Education Details (for Diploma/ITI holders)
+    education: {
+      collegeInstituteName: {
+        type: String,
+        trim: true,
+      },
+      city: {
+        type: String,
+        trim: true,
+      },
+      state: {
+        type: String,
+        trim: true,
+      },
+      yearOfPassing: {
+        type: String,
+        trim: true,
+      },
+      percentageOrGrade: {
+        type: String,
+        trim: true,
+      },
+    },
+
+    // Experience Status
+    experienceStatus: {
+      hasExperience: {
+        type: Boolean,
+        default: false,
+      },
+      isFresher: {
+        type: Boolean,
+        default: true,
+      },
+    },
+
+    // Registration Status
+    registrationStep: {
+      type: Number,
+      default: 0, // 0 = not started, 1 = step 1, 2 = step 2, 3 = step 3, 4 = completed
+    },
+    isRegistrationComplete: {
+      type: Boolean,
+      default: false,
+    },
+
+    // Status
+    status: {
+      type: String,
+      enum: ["Pending", "Active", "Inactive", "Rejected"],
+      default: "Pending",
+    },
+  },
+  {
+    timestamps: true,
+  }
+);
+
+// Indexes
+jobSeekerSchema.index({ phone: 1 });
+jobSeekerSchema.index({ category: 1 });
+jobSeekerSchema.index({ specializationId: 1 });
+jobSeekerSchema.index({ status: 1 });
+
+export const JobSeeker = model("JobSeeker", jobSeekerSchema);
+
