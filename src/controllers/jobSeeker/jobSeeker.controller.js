@@ -3,6 +3,8 @@ import { JobSeeker } from "../../models/jobSeeker/jobSeeker.model.js";
 import { Specialization } from "../../models/admin/specialization/specialization.model.js";
 import { QuestionSet } from "../../models/admin/questionSet/questionSet.model.js";
 import { Category } from "../../models/category/category.model.js";
+import { State } from "../../models/location/state.model.js";
+import { City } from "../../models/location/city.model.js";
 import ApiError from "../../utils/ApiError.js";
 import ApiResponse from "../../utils/ApiResponse.js";
 import { asyncHandler } from "../../utils/asyncHandler.js";
@@ -120,9 +122,10 @@ export const verifyOTP = asyncHandler(async (req, res) => {
 
 /**
  * Register Non-Degree Holder (Complete registration in one step)
+ * Supports both state/city names and stateId/cityId from dropdowns
  */
 export const registerNonDegree = asyncHandler(async (req, res) => {
-  const { phone, state, city, specializationId, selectedSkills } = req.body;
+  const { phone, state, city, stateId, cityId, specializationId, selectedSkills } = req.body;
   console.log("registerNonDegree req.body:", req.body);
 
   // Find job seeker
@@ -153,6 +156,35 @@ export const registerNonDegree = asyncHandler(async (req, res) => {
     );
   }
 
+  // Resolve state and city names from IDs if provided
+  let stateName = state;
+  let cityName = city;
+
+  if (stateId && !stateName) {
+    const stateDoc = await State.findById(stateId);
+    if (!stateDoc) {
+      throw new ApiError(404, "State not found");
+    }
+    stateName = stateDoc.name;
+  }
+
+  if (cityId && !cityName) {
+    const cityDoc = await City.findById(cityId);
+    if (!cityDoc) {
+      throw new ApiError(404, "City not found");
+    }
+    cityName = cityDoc.name;
+    
+    // Verify city belongs to the selected state
+    if (stateId && cityDoc.stateId.toString() !== stateId) {
+      throw new ApiError(400, "City does not belong to the selected state");
+    }
+  }
+
+  if (!stateName || !cityName) {
+    throw new ApiError(400, "State and city are required");
+  }
+
   // Handle file uploads
   const aadhaarCard = req.files?.aadhaarCard?.[0]
     ? getFileUrl(req.files.aadhaarCard[0])
@@ -170,8 +202,8 @@ export const registerNonDegree = asyncHandler(async (req, res) => {
   }
 
   // Update job seeker
-  jobSeeker.state = state;
-  jobSeeker.city = city;
+  jobSeeker.state = stateName;
+  jobSeeker.city = cityName;
   jobSeeker.specializationId = specializationId;
   jobSeeker.selectedSkills = selectedSkills; // Only store selected skills (user's known skills)
   jobSeeker.aadhaarCard = aadhaarCard;
@@ -522,6 +554,15 @@ export const getSpecializationSkills = asyncHandler(async (req, res) => {
     label: skill,
   }));
 
+  // Format questions with auto-generated questionId for frontend
+  const formattedQuestions = questionSet
+    ? (questionSet.questions || []).map((question, index) => ({
+        questionId: `q${index + 1}`, // Auto-generated questionId: "q1", "q2", "q3", etc.
+        text: question.text,
+        options: question.options || [],
+      }))
+    : [];
+
   return res
     .status(200)
     .json(
@@ -537,7 +578,7 @@ export const getSpecializationSkills = asyncHandler(async (req, res) => {
             ? {
                 _id: questionSet._id,
                 name: questionSet.name,
-                questions: questionSet.questions || [],
+                questions: formattedQuestions, // Questions with auto-generated questionId
                 totalQuestions: questionSet.totalQuestions || 0,
               }
             : null,

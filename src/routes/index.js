@@ -9,6 +9,7 @@ import categoryRoutes from "./admin/category/category.routes.js";
 import jobSeekerRoutes from "./jobSeeker/jobSeeker.routes.js";
 import recruiterRoutes from "./recruiter/recruiter.routes.js";
 import roleRoutes from "./role/role.routes.js";
+import locationRoutes from "./location/location.routes.js";
 
 const router = Router();
 
@@ -25,5 +26,6 @@ router.use("/api/categories", categoryRoutes);
 router.use("/api/job-seekers", jobSeekerRoutes);
 router.use("/api/recruiters", recruiterRoutes);
 router.use("/api/roles", roleRoutes);
+router.use("/api/location", locationRoutes);
 
 export default router;

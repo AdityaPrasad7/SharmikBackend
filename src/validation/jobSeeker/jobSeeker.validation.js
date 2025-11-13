@@ -26,6 +26,22 @@ const categorySchema = Joi.string()
 const stateSchema = Joi.string().trim().min(1).required();
 const citySchema = Joi.string().trim().min(1).required();
 
+// State ID Schema (MongoDB ObjectId)
+const stateIdSchema = Joi.string()
+  .pattern(/^[0-9a-fA-F]{24}$/)
+  .optional()
+  .messages({
+    "string.pattern.base": "Invalid state ID",
+  });
+
+// City ID Schema (MongoDB ObjectId)
+const cityIdSchema = Joi.string()
+  .pattern(/^[0-9a-fA-F]{24}$/)
+  .optional()
+  .messages({
+    "string.pattern.base": "Invalid city ID",
+  });
+
 // Send OTP Schema (category is optional here, will be sent in verify-otp)
 export const sendOTPSchema = Joi.object({
   phone: phoneSchema,
@@ -40,10 +56,15 @@ export const verifyOTPSchema = Joi.object({
 });
 
 // Non-Degree Holder Registration Schema
+// Supports both: state/city (names) OR stateId/cityId (IDs from dropdowns)
 export const nonDegreeRegistrationSchema = Joi.object({
   phone: phoneSchema,
-  state: stateSchema,
-  city: citySchema,
+  // Option 1: State and City names (backward compatible)
+  state: stateSchema.optional(),
+  city: citySchema.optional(),
+  // Option 2: State and City IDs (from dropdowns)
+  stateId: stateIdSchema,
+  cityId: cityIdSchema,
   specializationId: Joi.string()
     .pattern(/^[0-9a-fA-F]{24}$/)
     .required()
@@ -59,6 +80,8 @@ export const nonDegreeRegistrationSchema = Joi.object({
       "array.min": "At least one skill must be selected",
       "any.required": "Skills are required",
     }),
+}).or("state", "stateId").or("city", "cityId").messages({
+  "object.missing": "Either state/stateId and city/cityId are required",
 });
 
 // Step 1 Registration Schema (Diploma/ITI Holder)
