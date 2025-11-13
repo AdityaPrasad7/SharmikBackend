@@ -248,11 +248,19 @@ export const step1Registration = asyncHandler(async (req, res) => {
  * Step 2 Registration (Diploma/ITI Holder) - Select Trade, Skills, and Answer Questions
  */
 export const step2Registration = asyncHandler(async (req, res) => {
-  const { phone, specializationId, selectedSkills, questionAnswers, role } =
+  const { phone, jobSeekerId, specializationId, selectedSkills, questionAnswers, role } =
     req.body;
 
-  // Find job seeker
-  const jobSeeker = await JobSeeker.findOne({ phone });
+  // Find job seeker - prefer jobSeekerId over phone
+  let jobSeeker;
+  if (jobSeekerId) {
+    jobSeeker = await JobSeeker.findById(jobSeekerId);
+  } else if (phone) {
+    jobSeeker = await JobSeeker.findOne({ phone });
+  } else {
+    throw new ApiError(400, "Either jobSeekerId or phone is required");
+  }
+
   if (!jobSeeker || !jobSeeker.phoneVerified) {
     throw new ApiError(400, "Please verify your phone number first");
   }
@@ -363,10 +371,18 @@ export const step2Registration = asyncHandler(async (req, res) => {
  * Step 3 Registration (Diploma/ITI Holder) - Education and Experience Details
  */
 export const step3Registration = asyncHandler(async (req, res) => {
-  const { phone, education, experienceStatus } = req.body;
+  const { phone, jobSeekerId, education, experienceStatus } = req.body;
 
-  // Find job seeker
-  const jobSeeker = await JobSeeker.findOne({ phone });
+  // Find job seeker - prefer jobSeekerId over phone
+  let jobSeeker;
+  if (jobSeekerId) {
+    jobSeeker = await JobSeeker.findById(jobSeekerId);
+  } else if (phone) {
+    jobSeeker = await JobSeeker.findOne({ phone });
+  } else {
+    throw new ApiError(400, "Either jobSeekerId or phone is required");
+  }
+
   if (!jobSeeker || !jobSeeker.phoneVerified) {
     throw new ApiError(400, "Please verify your phone number first");
   }

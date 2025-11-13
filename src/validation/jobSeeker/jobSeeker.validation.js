@@ -70,7 +70,13 @@ export const step1RegistrationSchema = Joi.object({
 
 // Step 2 Registration Schema (Diploma/ITI Holder)
 export const step2RegistrationSchema = Joi.object({
-  phone: phoneSchema,
+  phone: phoneSchema.optional(),
+  jobSeekerId: Joi.string()
+    .pattern(/^[0-9a-fA-F]{24}$/)
+    .optional()
+    .messages({
+      "string.pattern.base": "Invalid job seeker ID",
+    }),
   specializationId: Joi.string()
     .pattern(/^[0-9a-fA-F]{24}$/)
     .required()
@@ -105,11 +111,17 @@ export const step2RegistrationSchema = Joi.object({
     .valid("Worker", "Contractor", "Admin")
     .default("Worker")
     .optional(),
-});
+}).or("phone", "jobSeekerId"); // At least one of phone or jobSeekerId is required
 
 // Step 3 Registration Schema (Diploma/ITI Holder)
 export const step3RegistrationSchema = Joi.object({
-  phone: phoneSchema,
+  phone: phoneSchema.optional(),
+  jobSeekerId: Joi.string()
+    .pattern(/^[0-9a-fA-F]{24}$/)
+    .optional()
+    .messages({
+      "string.pattern.base": "Invalid job seeker ID",
+    }),
   education: Joi.object({
     collegeInstituteName: Joi.string().trim().min(1).required(),
     city: Joi.string().trim().min(1).required(),
@@ -122,7 +134,7 @@ export const step3RegistrationSchema = Joi.object({
     isFresher: Joi.boolean().required(),
   }).required(),
   // Files (resume, documents, experienceCertificate) will be handled via multer
-});
+}).or("phone", "jobSeekerId"); // At least one of phone or jobSeekerId is required
 
 // Get Specialization Skills Schema
 export const getSpecializationSkillsSchema = Joi.object({

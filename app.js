@@ -10,6 +10,7 @@ import ApiError from "./src/utils/ApiError.js";
 import routes from "./src/routes/index.js";
 import { seedDefaultAdmin } from "./src/seeders/seedAdmin.js";
 import { seedCategories } from "./src/seeders/seedCategories.js";
+import { seedRoles } from "./src/seeders/seedRoles.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -27,6 +28,7 @@ async function initializeDB() {
     await connectDB();
     await seedDefaultAdmin();
     await seedCategories();
+    await seedRoles();
     dbInitialized = true;
   }
 }
