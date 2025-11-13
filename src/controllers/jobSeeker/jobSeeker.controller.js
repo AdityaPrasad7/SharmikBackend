@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import { JobSeeker } from "../../models/jobSeeker/jobSeeker.model.js";
 import { Specialization } from "../../models/admin/specialization/specialization.model.js";
 import { QuestionSet } from "../../models/admin/questionSet/questionSet.model.js";
@@ -279,12 +280,25 @@ export const step2Registration = asyncHandler(async (req, res) => {
   }
 
   // Get question set for this specialization
+  // Check if specializationId is in the specializationIds array
+  // Convert specializationId to ObjectId for proper matching
+  const specializationObjectId = new mongoose.Types.ObjectId(specializationId);
   const questionSet = await QuestionSet.findOne({
-    specializationIds: specializationId,
+    specializationIds: { $in: [specializationObjectId] },
   });
 
-  if (!questionSet || !questionSet.questions || questionSet.questions.length === 0) {
-    throw new ApiError(404, "No question set found for this specialization");
+  if (!questionSet) {
+    throw new ApiError(
+      404,
+      `No question set found for this specialization. Please ask admin to create a question set for specialization ID: ${specializationId}`
+    );
+  }
+
+  if (!questionSet.questions || questionSet.questions.length === 0) {
+    throw new ApiError(
+      404,
+      `Question set found but it has no questions. Please ask admin to add questions to the question set.`
+    );
   }
 
   // Validate that all questions are answered
@@ -438,6 +452,7 @@ export const getCategories = asyncHandler(async (req, res) => {
 
 /**
  * Get All Specializations (Public endpoint for registration)
+ * Returns all specializations formatted for dropdown selection
  */
 export const getAllSpecializations = asyncHandler(async (req, res) => {
   const specializations = await Specialization.find({ status: "Active" })
@@ -445,18 +460,29 @@ export const getAllSpecializations = asyncHandler(async (req, res) => {
     .sort({ name: 1 })
     .lean();
 
+  // Format for dropdown (just names and IDs)
+  const formattedSpecializations = specializations.map((spec) => ({
+    _id: spec._id,
+    value: spec._id.toString(),
+    label: spec.name,
+    name: spec.name,
+  }));
+
   return res
     .status(200)
     .json(
       ApiResponse.success(
-        { specializations },
+        { specializations: formattedSpecializations },
         "Specializations fetched successfully"
       )
     );
 });
 
 /**
- * Get Specialization with Skills
+ * Get Specialization with Skills and Questions
+ * Used when user selects a specialization from dropdown
+ * Returns all skills for that specialization (for user to select from)
+ * Also returns questions related to that specialization
  */
 export const getSpecializationSkills = asyncHandler(async (req, res) => {
   const { specializationId } = req.params;
@@ -467,9 +493,18 @@ export const getSpecializationSkills = asyncHandler(async (req, res) => {
   }
 
   // Get question set for this specialization
+  // Check if specializationId is in the specializationIds array
+  // Convert specializationId to ObjectId for proper matching
+  const specializationObjectId = new mongoose.Types.ObjectId(specializationId);
   const questionSet = await QuestionSet.findOne({
-    specializationIds: specializationId,
+    specializationIds: { $in: [specializationObjectId] },
   }).lean();
+
+  // Format skills for frontend selection (all available skills from this specialization)
+  const allSkills = (specialization.skills || []).map((skill) => ({
+    value: skill,
+    label: skill,
+  }));
 
   return res
     .status(200)
@@ -479,7 +514,8 @@ export const getSpecializationSkills = asyncHandler(async (req, res) => {
           specialization: {
             _id: specialization._id,
             name: specialization.name,
-            skills: specialization.skills || [],
+            skills: specialization.skills || [], // Raw skills array
+            allSkills: allSkills, // Formatted for frontend selection
           },
           questionSet: questionSet
             ? {
@@ -490,7 +526,7 @@ export const getSpecializationSkills = asyncHandler(async (req, res) => {
               }
             : null,
         },
-        "Specialization and skills fetched successfully"
+        "Specialization, skills, and questions fetched successfully"
       )
     );
 });

@@ -3,10 +3,17 @@ import { asyncHandler } from "../../utils/asyncHandler.js";
 
 export const validateRequest = (schema, property = "body") =>
   asyncHandler(async (req, res, next) => {
-    let data = property === "query" ? req.query : req.body;
+    let data;
+    if (property === "query") {
+      data = req.query;
+    } else if (property === "params") {
+      data = req.params;
+    } else {
+      data = req.body;
+    }
     
     // Normalize keys and values - remove leading/trailing whitespace from keys and values
-    if (property === "body" && data) {
+    if ((property === "body" || property === "params") && data) {
       const normalized = {};
       for (const [key, value] of Object.entries(data)) {
         // Remove whitespace (spaces, tabs, newlines) from keys
@@ -16,7 +23,11 @@ export const validateRequest = (schema, property = "body") =>
         normalized[normalizedKey] = normalizedValue;
       }
       data = normalized;
-      req.body = normalized;
+      if (property === "body") {
+        req.body = normalized;
+      } else if (property === "params") {
+        req.params = normalized;
+      }
     }
 
     // Parse JSON strings from form-data before validation
@@ -71,6 +82,8 @@ export const validateRequest = (schema, property = "body") =>
 
     if (property === "query") {
       req.query = value;
+    } else if (property === "params") {
+      req.params = value;
     } else {
       req.body = value;
     }
