@@ -64,7 +64,7 @@ export const nonDegreeRegistrationSchema = Joi.object({
 // Step 1 Registration Schema (Diploma/ITI Holder)
 export const step1RegistrationSchema = Joi.object({
   phone: phoneSchema,
-  category: categorySchema,
+  // category is optional - already set in verify-otp and stored in job seeker record
   // Files will be handled separately via multer
 });
 
@@ -132,6 +132,17 @@ export const getSpecializationSkillsSchema = Joi.object({
     .messages({
       "string.pattern.base": "Invalid specialization ID",
       "any.required": "Specialization ID is required",
+    }),
+});
+
+// Get Skills by Category Schema
+export const getSkillsByCategorySchema = Joi.object({
+  category: Joi.string()
+    .valid("Non-Degree Holder", "Diploma Holder", "ITI Holder")
+    .required()
+    .messages({
+      "any.only": "Category must be one of: Non-Degree Holder, Diploma Holder, ITI Holder",
+      "any.required": "Category is required",
     }),
 });
 

@@ -163,8 +163,7 @@ export const registerNonDegree = asyncHandler(async (req, res) => {
   jobSeeker.state = state;
   jobSeeker.city = city;
   jobSeeker.specializationId = specializationId;
-  jobSeeker.selectedSkills = selectedSkills;
-  jobSeeker.skills = selectedSkills;
+  jobSeeker.selectedSkills = selectedSkills; // Only store selected skills (user's known skills)
   jobSeeker.aadhaarCard = aadhaarCard;
   jobSeeker.profilePhoto = profilePhoto;
   jobSeeker.registrationStep = 4;
@@ -483,6 +482,81 @@ export const getSpecializationSkills = asyncHandler(async (req, res) => {
             : null,
         },
         "Specialization and skills fetched successfully"
+      )
+    );
+});
+
+/**
+ * Get Skills by Category
+ * Returns all skills from the specialization matching the category
+ * Used for Non-Degree Holder registration to show all available skills
+ */
+export const getSkillsByCategory = asyncHandler(async (req, res) => {
+  const { category } = req.query;
+
+  if (!category) {
+    throw new ApiError(400, "Category is required");
+  }
+
+  // Map category names to specialization names
+  // "Non-Degree Holder" -> "Non-Degree"
+  // "Diploma Holder" -> "Diploma"
+  // "ITI Holder" -> "ITI"
+  const categoryToSpecializationMap = {
+    "Non-Degree Holder": "Non-Degree",
+    "Diploma Holder": "Diploma",
+    "ITI Holder": "ITI",
+  };
+
+  const specializationName = categoryToSpecializationMap[category];
+
+  if (!specializationName) {
+    throw new ApiError(
+      400,
+      `Invalid category. Valid categories: ${Object.keys(categoryToSpecializationMap).join(", ")}`
+    );
+  }
+
+  // Find specialization by name (case-insensitive, exact match preferred)
+  let specialization = await Specialization.findOne({
+    name: { $regex: new RegExp(`^${specializationName}$`, "i") },
+    status: "Active",
+  }).lean();
+
+  // If exact match not found, try partial match
+  if (!specialization) {
+    specialization = await Specialization.findOne({
+      name: { $regex: new RegExp(specializationName, "i") },
+      status: "Active",
+    }).lean();
+  }
+
+  if (!specialization) {
+    throw new ApiError(
+      404,
+      `No active specialization found for category: ${category}. Please ask admin to create a "${specializationName}" specialization.`
+    );
+  }
+
+  // Format skills for frontend selection (all available skills)
+  const allSkills = (specialization.skills || []).map((skill) => ({
+    value: skill,
+    label: skill,
+  }));
+
+  return res
+    .status(200)
+    .json(
+      ApiResponse.success(
+        {
+          category: category,
+          specialization: {
+            _id: specialization._id,
+            name: specialization.name,
+            allSkills: allSkills, // All available skills formatted for frontend (user can select from these)
+          },
+        },
+        "Skills fetched successfully"
       )
     );
 });

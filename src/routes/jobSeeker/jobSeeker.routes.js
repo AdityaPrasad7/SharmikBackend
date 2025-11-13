@@ -9,6 +9,7 @@ import {
   getCategories,
   getAllSpecializations,
   getSpecializationSkills,
+  getSkillsByCategory,
   getJobSeekerByPhone,
 } from "../../controllers/jobSeeker/jobSeeker.controller.js";
 import { validateRequest } from "../../middlewares/jobSeeker/validateJobSeeker.js";
@@ -20,6 +21,7 @@ import {
   step2RegistrationSchema,
   step3RegistrationSchema,
   getSpecializationSkillsSchema,
+  getSkillsByCategorySchema,
 } from "../../validation/jobSeeker/jobSeeker.validation.js";
 import { uploadFields } from "../../middlewares/fileUpload.js";
 
@@ -97,6 +99,13 @@ router.get(
   "/specialization/:specializationId",
   validateRequest(getSpecializationSkillsSchema, "params"),
   getSpecializationSkills
+);
+
+// Get Skills by Category (for Non-Degree/Diploma/ITI registration) - Must be before /:phone route
+router.get(
+  "/skills-by-category",
+  validateRequest(getSkillsByCategorySchema, "query"),
+  getSkillsByCategory
 );
 
 // Get Job Seeker by Phone - Must be last to avoid route conflicts

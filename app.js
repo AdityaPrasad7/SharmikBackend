@@ -1,4 +1,4 @@
-// src/app.js
+// app.js
 import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
@@ -14,14 +14,22 @@ import { seedCategories } from "./src/seeders/seedCategories.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-dotenv.config({ path: path.resolve(__dirname, "../.env") });
+dotenv.config({ path: path.resolve(__dirname, ".env") });
 
 const app = express();
 
-// -------------------- Connect to MongoDB --------------------
-await connectDB();
-await seedDefaultAdmin();
-await seedCategories();
+// Flag to track if DB is initialized (for serverless)
+let dbInitialized = false;
+
+// -------------------- Initialize Database (for serverless compatibility) --------------------
+async function initializeDB() {
+  if (!dbInitialized) {
+    await connectDB();
+    await seedDefaultAdmin();
+    await seedCategories();
+    dbInitialized = true;
+  }
+}
 
 // -------------------- CORS --------------------
 app.use(
@@ -50,6 +58,15 @@ app.use(express.static("public"));
 // Serve uploaded files
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
+// -------------------- Middleware to ensure DB is initialized (for serverless) --------------------
+// This must be before routes to ensure DB is connected before handling requests
+app.use(async (req, res, next) => {
+  if (!dbInitialized) {
+    await initializeDB();
+  }
+  next();
+});
+
 // -------------------- Routes --------------------
 app.use("/", routes);
 
@@ -76,8 +93,19 @@ app.use((err, req, res, next) => {
   });
 });
 
-// -------------------- Start Server --------------------
-const PORT = process.env.PORT || 8000;
-app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
+// -------------------- Start Server (only in local development) --------------------
+// Vercel serverless functions don't need app.listen()
+if (process.env.NODE_ENV !== "production" || !process.env.VERCEL) {
+  const PORT = process.env.PORT || 8000;
+  // Initialize DB before starting server
+  initializeDB()
+    .then(() => {
+      app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
+    })
+    .catch((err) => {
+      console.error("Failed to start server:", err);
+      process.exit(1);
+    });
+}
 
 export default app;
