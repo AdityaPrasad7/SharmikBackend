@@ -401,9 +401,12 @@ export const step2Registration = asyncHandler(async (req, res) => {
 
 /**
  * Step 3 Registration (Diploma/ITI Holder) - Education and Experience Details
+ * Supports:
+ * - stateId/cityId/yearOfPassing from dropdowns OR state/city/yearOfPassing as names
+ * - percentageOrGrade as separate field OR inside education object
  */
 export const step3Registration = asyncHandler(async (req, res) => {
-  const { phone, jobSeekerId, education, experienceStatus } = req.body;
+  const { phone, jobSeekerId, education, stateId, cityId, yearOfPassing, percentageOrGrade, experienceStatus } = req.body;
 
   // Find job seeker - prefer jobSeekerId over phone
   let jobSeeker;
@@ -421,6 +424,56 @@ export const step3Registration = asyncHandler(async (req, res) => {
 
   if (jobSeeker.registrationStep < 3) {
     throw new ApiError(400, "Please complete step 2 first");
+  }
+
+  // Resolve state and city names from IDs if provided
+  let stateName = education?.state;
+  let cityName = education?.city;
+  let yearValue = education?.yearOfPassing || yearOfPassing;
+
+  if (stateId && !stateName) {
+    const stateDoc = await State.findById(stateId);
+    if (!stateDoc) {
+      throw new ApiError(404, "State not found");
+    }
+    stateName = stateDoc.name;
+  }
+
+  if (cityId && !cityName) {
+    const cityDoc = await City.findById(cityId);
+    if (!cityDoc) {
+      throw new ApiError(404, "City not found");
+    }
+    cityName = cityDoc.name;
+    
+    // Verify city belongs to the selected state
+    if (stateId && cityDoc.stateId.toString() !== stateId) {
+      throw new ApiError(400, "City does not belong to the selected state");
+    }
+  }
+
+  // Build final education object
+  const finalEducation = {
+    collegeInstituteName: education.collegeInstituteName,
+    city: cityName,
+    state: stateName,
+    yearOfPassing: yearValue,
+  };
+
+  // Merge percentageOrGrade into education if provided separately
+  if (percentageOrGrade) {
+    finalEducation.percentageOrGrade = percentageOrGrade;
+  } else if (education.percentageOrGrade) {
+    finalEducation.percentageOrGrade = education.percentageOrGrade;
+  }
+  
+  // Validate required fields
+  if (!finalEducation.city || !finalEducation.state || !finalEducation.yearOfPassing) {
+    throw new ApiError(400, "State, city, and year of passing are required");
+  }
+  
+  if (!finalEducation.percentageOrGrade) {
+    throw new ApiError(400, "Percentage or Grade is required");
   }
 
   // Handle file uploads
@@ -446,7 +499,7 @@ export const step3Registration = asyncHandler(async (req, res) => {
   }
 
   // Update job seeker
-  jobSeeker.education = education;
+  jobSeeker.education = finalEducation;
   jobSeeker.experienceStatus = experienceStatus;
   jobSeeker.resume = resume;
   if (experienceCertificate) {

@@ -140,3 +140,37 @@ export const getCitiesByStateName = asyncHandler(async (req, res) => {
     );
 });
 
+/**
+ * Get Years for Year of Passing Dropdown (Public endpoint)
+ * Returns last 100 years from current year, auto-incrementing
+ * Years are in descending order (most recent first)
+ */
+export const getYears = asyncHandler(async (req, res) => {
+  const currentYear = new Date().getFullYear();
+  const startYear = currentYear - 99; // Last 100 years (including current year)
+  
+  // Generate years array from startYear to currentYear (descending order)
+  const years = [];
+  for (let year = currentYear; year >= startYear; year--) {
+    years.push({
+      value: year.toString(),
+      label: year.toString(),
+      year: year,
+    });
+  }
+
+  return res
+    .status(200)
+    .json(
+      ApiResponse.success(
+        {
+          years: years,
+          currentYear: currentYear,
+          startYear: startYear,
+          totalYears: years.length,
+        },
+        "Years fetched successfully"
+      )
+    );
+});
+

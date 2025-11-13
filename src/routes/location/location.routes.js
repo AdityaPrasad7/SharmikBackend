@@ -3,6 +3,7 @@ import {
   getAllStates,
   getCitiesByState,
   getCitiesByStateName,
+  getYears,
 } from "../../controllers/location/location.controller.js";
 
 const router = Router();
@@ -15,6 +16,9 @@ router.get("/cities/state/:stateId", getCitiesByState);
 
 // Get Cities by State Name (Alternative - Public - for registration)
 router.get("/cities/state-name/:stateName", getCitiesByStateName);
+
+// Get Years for Year of Passing Dropdown (Public - for registration)
+router.get("/years", getYears);
 
 export default router;
 

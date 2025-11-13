@@ -137,6 +137,8 @@ export const step2RegistrationSchema = Joi.object({
 }).or("phone", "jobSeekerId"); // At least one of phone or jobSeekerId is required
 
 // Step 3 Registration Schema (Diploma/ITI Holder)
+// Supports stateId/cityId/yearOfPassing from dropdowns OR state/city/yearOfPassing as names
+// Supports percentageOrGrade as separate field OR inside education object
 export const step3RegistrationSchema = Joi.object({
   phone: phoneSchema.optional(),
   jobSeekerId: Joi.string()
@@ -147,17 +149,39 @@ export const step3RegistrationSchema = Joi.object({
     }),
   education: Joi.object({
     collegeInstituteName: Joi.string().trim().min(1).required(),
-    city: Joi.string().trim().min(1).required(),
-    state: Joi.string().trim().min(1).required(),
-    yearOfPassing: Joi.string().trim().min(1).required(),
-    percentageOrGrade: Joi.string().trim().min(1).required(),
+    // Option 1: City and State names (backward compatible)
+    city: Joi.string().trim().min(1).optional(),
+    state: Joi.string().trim().min(1).optional(),
+    yearOfPassing: Joi.string().trim().min(1).optional(), // Optional if provided separately
+    percentageOrGrade: Joi.string().trim().min(1).optional(), // Optional if provided separately
   }).required(),
+  // Option 2: State and City IDs (from dropdowns)
+  stateId: Joi.string()
+    .pattern(/^[0-9a-fA-F]{24}$/)
+    .optional()
+    .messages({
+      "string.pattern.base": "Invalid state ID",
+    }),
+  cityId: Joi.string()
+    .pattern(/^[0-9a-fA-F]{24}$/)
+    .optional()
+    .messages({
+      "string.pattern.base": "Invalid city ID",
+    }),
+  // Option 3: Year of Passing (from years API - just the year value like "2023")
+  yearOfPassing: Joi.string().trim().min(1).optional(), // Separate field option
+  // Option 4: Percentage/Grade (separate field)
+  percentageOrGrade: Joi.string().trim().min(1).optional(), // Separate field option
   experienceStatus: Joi.object({
     hasExperience: Joi.boolean().required(),
     isFresher: Joi.boolean().required(),
   }).required(),
   // Files (resume, documents, experienceCertificate) will be handled via multer
-}).or("phone", "jobSeekerId"); // At least one of phone or jobSeekerId is required
+})
+  .or("phone", "jobSeekerId") // At least one of phone or jobSeekerId is required
+  .or("education.state", "stateId") // At least one of state or stateId
+  .or("education.city", "cityId") // At least one of city or cityId
+  .or("education.yearOfPassing", "yearOfPassing"); // At least one of yearOfPassing in education or separate
 
 // Get Specialization Skills Schema
 export const getSpecializationSkillsSchema = Joi.object({
