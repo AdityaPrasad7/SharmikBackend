@@ -1,60 +1,31 @@
 import multer from "multer";
-import fs from "fs-extra";
-import path from "path";
-import { fileURLToPath } from "url";
+import { uploadToCloudinary, getCloudinaryUrl } from "../utils/cloudinary.js";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// Ensure upload directories exist
-const UPLOAD_BASE_DIR = path.join(__dirname, "../../uploads");
-const UPLOAD_DIRS = {
-  aadhaar: path.join(UPLOAD_BASE_DIR, "aadhaar"),
-  profile: path.join(UPLOAD_BASE_DIR, "profile"),
-  resume: path.join(UPLOAD_BASE_DIR, "resume"),
-  documents: path.join(UPLOAD_BASE_DIR, "documents"),
-  experience: path.join(UPLOAD_BASE_DIR, "experience"),
+// Map field names to Cloudinary folders
+const FIELD_TO_FOLDER = {
+  aadhaarCard: "aadhaar",
+  profilePhoto: "profile",
+  resume: "resume",
+  experienceCertificate: "experience",
+  documents: "documents",
 };
 
-// Create directories if they don't exist
-Object.values(UPLOAD_DIRS).forEach((dir) => {
-  fs.ensureDirSync(dir);
-});
+// Determine resource type based on MIME type
+const getResourceType = (mimetype) => {
+  if (mimetype.startsWith("image/")) {
+    return "image";
+  }
+  if (mimetype === "application/pdf" || mimetype.includes("document") || mimetype.includes("word")) {
+    return "raw"; // PDFs and documents as raw files
+  }
+  return "auto"; // Let Cloudinary auto-detect
+};
 
-// Configure storage
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    // Determine destination based on field name
-    let dest = UPLOAD_DIRS.documents; // default
-    
-    if (file.fieldname === "aadhaarCard") {
-      dest = UPLOAD_DIRS.aadhaar;
-    } else if (file.fieldname === "profilePhoto") {
-      dest = UPLOAD_DIRS.profile;
-    } else if (file.fieldname === "resume") {
-      dest = UPLOAD_DIRS.resume;
-    } else if (file.fieldname === "experienceCertificate") {
-      dest = UPLOAD_DIRS.experience;
-    } else if (file.fieldname === "documents") {
-      dest = UPLOAD_DIRS.documents;
-    }
-    
-    cb(null, dest);
-  },
-  filename: (req, file, cb) => {
-    // Generate unique filename: timestamp-random-originalname
-    const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-    const ext = path.extname(file.originalname);
-    const name = path.basename(file.originalname, ext);
-    const filename = `${name}-${uniqueSuffix}${ext}`;
-    cb(null, filename);
-  },
-});
+// Configure multer to use memory storage (for Cloudinary upload)
+const storage = multer.memoryStorage();
 
 // File filter
 const fileFilter = (req, file, cb) => {
-  // Allow all file types for now (as per requirement: "any type of file")
-  // You can add restrictions later if needed
   const allowedMimes = [
     "image/jpeg",
     "image/jpg",
@@ -91,15 +62,100 @@ export const uploadMultiple = (fieldName, maxCount = 5) =>
 // Middleware for multiple fields
 export const uploadFields = (fields) => upload.fields(fields);
 
-// Helper to get file path relative to project root for serving
-export const getFileUrl = (filePath) => {
-  if (!filePath) return null;
-  // Convert absolute path to relative path from project root
-  // Multer saves to: uploads/aadhaar/filename.ext (relative to project root)
-  // We need: uploads/aadhaar/filename.ext
-  const projectRoot = path.join(__dirname, "../../");
-  const relativePath = path.relative(projectRoot, filePath);
-  // Normalize path separators for URLs
-  return relativePath.replace(/\\/g, "/");
+/**
+ * Middleware to upload files to Cloudinary after multer processes them
+ * This should be used after uploadFields/uploadSingle/uploadMultiple
+ */
+export const uploadToCloudinaryMiddleware = async (req, res, next) => {
+  try {
+    // Handle single file
+    if (req.file) {
+      const folder = FIELD_TO_FOLDER[req.file.fieldname] || "documents";
+      const resourceType = getResourceType(req.file.mimetype);
+      
+      const result = await uploadToCloudinary(
+        req.file.buffer,
+        folder,
+        resourceType
+      );
+      
+      // Store Cloudinary URL and public_id in file object
+      req.file.cloudinaryUrl = result.secure_url;
+      req.file.publicId = result.public_id;
+      req.file.url = result.secure_url; // For backward compatibility
+    }
+    
+    // Handle multiple files
+    if (req.files) {
+      for (const fieldname in req.files) {
+        const files = Array.isArray(req.files[fieldname])
+          ? req.files[fieldname]
+          : [req.files[fieldname]];
+        
+        for (const file of files) {
+          const folder = FIELD_TO_FOLDER[fieldname] || "documents";
+          const resourceType = getResourceType(file.mimetype);
+          
+          const result = await uploadToCloudinary(
+            file.buffer,
+            folder,
+            resourceType
+          );
+          
+          // Store Cloudinary URL and public_id in file object
+          file.cloudinaryUrl = result.secure_url;
+          file.publicId = result.public_id;
+          file.url = result.secure_url; // For backward compatibility
+        }
+      }
+    }
+    
+    next();
+  } catch (error) {
+    console.error("Cloudinary upload error:", error);
+    next(error);
+  }
 };
 
+/**
+ * Helper to get file URL (Cloudinary URL or local path for backward compatibility)
+ * @param {string|Object} filePathOrFile - File path string or file object with cloudinaryUrl
+ * @returns {string|null} File URL
+ */
+export const getFileUrl = (filePathOrFile) => {
+  if (!filePathOrFile) return null;
+  
+  // If it's a file object with cloudinaryUrl (from Cloudinary upload)
+  if (typeof filePathOrFile === "object" && filePathOrFile.cloudinaryUrl) {
+    return filePathOrFile.cloudinaryUrl;
+  }
+  
+  // If it's already a URL (Cloudinary URL stored in DB)
+  if (typeof filePathOrFile === "string" && filePathOrFile.startsWith("http")) {
+    return filePathOrFile;
+  }
+  
+  // If it's a file object with url property
+  if (typeof filePathOrFile === "object" && filePathOrFile.url) {
+    return filePathOrFile.url;
+  }
+  
+  // If it's a file object with path (local file - for backward compatibility)
+  if (typeof filePathOrFile === "object" && filePathOrFile.path) {
+    // In production/Vercel, this shouldn't happen, but handle it gracefully
+    // Return the path as-is (might be a relative path from old uploads)
+    return filePathOrFile.path;
+  }
+  
+  // If it's a string path (local file - for backward compatibility)
+  if (typeof filePathOrFile === "string") {
+    // If it's already a full URL, return it
+    if (filePathOrFile.startsWith("http")) {
+      return filePathOrFile;
+    }
+    // Otherwise, it's a local path (shouldn't happen in production)
+    return filePathOrFile;
+  }
+  
+  return null;
+};

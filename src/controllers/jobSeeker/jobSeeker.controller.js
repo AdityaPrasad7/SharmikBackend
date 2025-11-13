@@ -145,10 +145,10 @@ export const registerNonDegree = asyncHandler(async (req, res) => {
 
   // Handle file uploads
   const aadhaarCard = req.files?.aadhaarCard?.[0]
-    ? getFileUrl(req.files.aadhaarCard[0].path)
+    ? getFileUrl(req.files.aadhaarCard[0])
     : null;
   const profilePhoto = req.files?.profilePhoto?.[0]
-    ? getFileUrl(req.files.profilePhoto[0].path)
+    ? getFileUrl(req.files.profilePhoto[0])
     : null;
 
   if (!aadhaarCard) {
@@ -203,10 +203,10 @@ export const step1Registration = asyncHandler(async (req, res) => {
 
   // Handle file uploads
   const aadhaarCard = req.files?.aadhaarCard?.[0]
-    ? getFileUrl(req.files.aadhaarCard[0].path)
+    ? getFileUrl(req.files.aadhaarCard[0])
     : null;
   const profilePhoto = req.files?.profilePhoto?.[0]
-    ? getFileUrl(req.files.profilePhoto[0].path)
+    ? getFileUrl(req.files.profilePhoto[0])
     : null;
 
   if (!aadhaarCard) {
@@ -354,13 +354,13 @@ export const step3Registration = asyncHandler(async (req, res) => {
 
   // Handle file uploads
   const resume = req.files?.resume?.[0]
-    ? getFileUrl(req.files.resume[0].path)
+    ? getFileUrl(req.files.resume[0])
     : null;
   const experienceCertificate = req.files?.experienceCertificate?.[0]
-    ? getFileUrl(req.files.experienceCertificate[0].path)
+    ? getFileUrl(req.files.experienceCertificate[0])
     : null;
   const documents = req.files?.documents
-    ? req.files.documents.map((file) => getFileUrl(file.path))
+    ? req.files.documents.map((file) => getFileUrl(file))
     : [];
 
   if (!resume) {

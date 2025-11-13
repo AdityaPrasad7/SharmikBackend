@@ -23,7 +23,7 @@ import {
   getSpecializationSkillsSchema,
   getSkillsByCategorySchema,
 } from "../../validation/jobSeeker/jobSeeker.validation.js";
-import { uploadFields } from "../../middlewares/fileUpload.js";
+import { uploadFields, uploadToCloudinaryMiddleware } from "../../middlewares/fileUpload.js";
 
 const router = Router();
 
@@ -47,6 +47,7 @@ router.post(
     { name: "aadhaarCard", maxCount: 1 },
     { name: "profilePhoto", maxCount: 1 },
   ]),
+  uploadToCloudinaryMiddleware, // Upload files to Cloudinary
   (req, res, next) => {
     // Debug: Log what multer received
     console.log("After multer - req.body:", req.body);
@@ -65,6 +66,7 @@ router.post(
     { name: "aadhaarCard", maxCount: 1 },
     { name: "profilePhoto", maxCount: 1 },
   ]),
+  uploadToCloudinaryMiddleware, // Upload files to Cloudinary
   validateRequest(step1RegistrationSchema),
   step1Registration
 );
@@ -84,6 +86,7 @@ router.post(
     { name: "experienceCertificate", maxCount: 1 },
     { name: "documents", maxCount: 5 },
   ]),
+  uploadToCloudinaryMiddleware, // Upload files to Cloudinary
   validateRequest(step3RegistrationSchema),
   step3Registration
 );

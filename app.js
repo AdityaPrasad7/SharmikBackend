@@ -55,8 +55,7 @@ app.use(express.json({ limit: "16kb" }));
 app.use(express.urlencoded({ extended: true, limit: "16kb" }));
 app.use(cookieParser());
 app.use(express.static("public"));
-// Serve uploaded files
-app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+// Note: File uploads are now handled by Cloudinary, so static file serving for uploads is not needed
 
 // -------------------- Middleware to ensure DB is initialized (for serverless) --------------------
 // This must be before routes to ensure DB is connected before handling requests
