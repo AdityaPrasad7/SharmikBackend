@@ -34,15 +34,24 @@ export const sendOTP = asyncHandler(async (req, res) => {
   const otp = await storeOTP(phone, purpose);
 
   // In production, send OTP via SMS service here
-  // For now, we'll return it in response (remove in production)
+  // For now, we'll return it in response for testing
   console.log(`OTP for ${phone} (${purpose}): ${otp}`);
+
+  // Return OTP if:
+  // 1. Development mode, OR
+  // 2. RETURN_OTP_IN_RESPONSE env variable is set to true, OR
+  // 3. OTP is "1234" (testing mode)
+  const shouldReturnOTP = 
+    process.env.NODE_ENV === "development" || 
+    process.env.RETURN_OTP_IN_RESPONSE === "true" ||
+    otp === "1234";
 
   return res
     .status(200)
     .json(
       ApiResponse.success(
         { 
-          otp: process.env.NODE_ENV === "development" ? otp : undefined, // Only return OTP in development
+          otp: shouldReturnOTP ? otp : undefined,
           isExistingUser: !!existingJobSeeker // Indicate if user exists (for frontend logic)
         },
         "OTP sent successfully"

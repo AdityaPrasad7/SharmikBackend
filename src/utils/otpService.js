@@ -2,12 +2,18 @@ import { OTP } from "../models/otp.model.js";
 
 /**
  * Generate a 4-digit OTP
- * In development: Always returns "1234" for testing
+ * In development/testing: Always returns "1234" for testing
  * In production: Returns random 4-digit OTP
  */
 export const generateOTP = () => {
-  // For development: return fixed OTP
-  if (process.env.NODE_ENV === "development" || !process.env.NODE_ENV) {
+  // For development/testing: return fixed OTP
+  // Check if we should use testing OTP (development mode OR RETURN_OTP_IN_RESPONSE is set)
+  const isTestingMode = 
+    process.env.NODE_ENV === "development" || 
+    !process.env.NODE_ENV ||
+    process.env.RETURN_OTP_IN_RESPONSE === "true";
+  
+  if (isTestingMode) {
     return "1234";
   }
   // For production: generate random OTP
