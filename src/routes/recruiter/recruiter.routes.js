@@ -31,11 +31,11 @@ router.post(
 // Recruiter Registration
 router.post(
   "/register",
-  validateRequest(recruiterRegistrationSchema),
   uploadFields([
-    { name: "profilePhoto", maxCount: 1 },
+    { name: "companyLogo", maxCount: 1 },
     { name: "documents", maxCount: 5 },
   ]),
+  validateRequest(recruiterRegistrationSchema),
   registerRecruiter
 );
 

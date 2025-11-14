@@ -11,6 +11,8 @@ import {
   getSpecializationSkills,
   getSkillsByCategory,
   getJobSeekerByPhone,
+  refreshAccessToken,
+  logoutJobSeeker,
 } from "../../controllers/jobSeeker/jobSeeker.controller.js";
 import { validateRequest } from "../../middlewares/jobSeeker/validateJobSeeker.js";
 import {
@@ -110,6 +112,12 @@ router.get(
   validateRequest(getSkillsByCategorySchema, "query"),
   getSkillsByCategory
 );
+
+// Refresh Token Route (Public - no auth required)
+router.post("/refresh-token", refreshAccessToken);
+
+// Logout Route (Public - no auth required, but should send refresh token)
+router.post("/logout", logoutJobSeeker);
 
 // Get Job Seeker by Phone - Must be last to avoid route conflicts
 router.get("/phone/:phone", getJobSeekerByPhone);

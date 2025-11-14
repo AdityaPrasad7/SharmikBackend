@@ -132,6 +132,13 @@ const jobSeekerSchema = new Schema(
       enum: ["Pending", "Active", "Inactive", "Rejected"],
       default: "Pending",
     },
+
+    // Authentication
+    refreshToken: {
+      type: String,
+      default: null,
+      select: false, // Don't include in queries by default (security)
+    },
   },
   {
     timestamps: true,

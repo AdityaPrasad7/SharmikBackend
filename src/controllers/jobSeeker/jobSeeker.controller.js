@@ -10,6 +10,7 @@ import ApiResponse from "../../utils/ApiResponse.js";
 import { asyncHandler } from "../../utils/asyncHandler.js";
 import { storeOTP, verifyOTP as verifyOTPFromService } from "../../utils/otpService.js";
 import { getFileUrl } from "../../middlewares/fileUpload.js";
+import { generateAccessToken, generateRefreshToken, verifyRefreshToken } from "../../utils/jwtToken.js";
 
 /**
  * Send OTP for mobile verification
@@ -110,12 +111,54 @@ export const verifyOTP = asyncHandler(async (req, res) => {
     await jobSeeker.save();
   }
 
+  // Generate JWT tokens
+  const accessToken = generateAccessToken({
+    id: jobSeeker._id.toString(),
+    phone: jobSeeker.phone,
+    role: jobSeeker.role || "job-seeker",
+  });
+
+  const refreshToken = generateRefreshToken({
+    id: jobSeeker._id.toString(),
+    phone: jobSeeker.phone,
+  });
+
+  // Save refresh token to database
+  jobSeeker.refreshToken = refreshToken;
+  await jobSeeker.save({ select: "+refreshToken" }); // Include refreshToken field
+
+  // Prepare safe job seeker data (exclude sensitive fields)
+  const safeJobSeeker = {
+    _id: jobSeeker._id,
+    phone: jobSeeker.phone,
+    phoneVerified: jobSeeker.phoneVerified,
+    category: jobSeeker.category,
+    role: jobSeeker.role,
+    registrationStep: jobSeeker.registrationStep,
+    isRegistrationComplete: jobSeeker.isRegistrationComplete,
+    status: jobSeeker.status,
+    // Include other safe fields as needed
+  };
+
+  // Set refresh token as HTTP-only cookie (optional, for web apps)
+  const cookieOptions = {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "strict",
+    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+  };
+  res.cookie("refreshToken", refreshToken, cookieOptions);
+
   return res
     .status(200)
     .json(
       ApiResponse.success(
-        { jobSeeker },
-        "OTP verified successfully"
+        {
+          accessToken,
+          refreshToken, // Also return in response for mobile apps
+          jobSeeker: safeJobSeeker,
+        },
+        purpose === "login" ? "Login successful" : "OTP verified successfully"
       )
     );
 });
@@ -736,6 +779,152 @@ export const getJobSeekerByPhone = asyncHandler(async (req, res) => {
       ApiResponse.success(
         { jobSeeker },
         "Job seeker fetched successfully"
+      )
+    );
+});
+
+/**
+ * Refresh Access Token
+ * 
+ * This endpoint allows job seekers to get a new access token when their current one expires.
+ * Uses the refresh token (long-lived) to generate a new access token (short-lived).
+ * 
+ * Flow:
+ * 1. Client sends refresh token
+ * 2. Verify refresh token signature and expiration
+ * 3. Find job seeker and verify stored refresh token matches
+ * 4. Generate new access token
+ * 5. Optionally generate new refresh token (token rotation)
+ * 
+ * @route POST /api/job-seekers/refresh-token
+ */
+export const refreshAccessToken = asyncHandler(async (req, res) => {
+  // 1. Extract refresh token from request
+  const incomingRefreshToken = 
+    req.body.refreshToken || 
+    req.cookies?.refreshToken;
+
+  if (!incomingRefreshToken) {
+    throw new ApiError(401, "Refresh token is required");
+  }
+
+  // 2. Verify refresh token signature and expiration
+  let decodedToken;
+  try {
+    decodedToken = verifyRefreshToken(incomingRefreshToken);
+  } catch (error) {
+    if (error.name === "TokenExpiredError") {
+      throw new ApiError(401, "Refresh token expired. Please login again.");
+    } else if (error.name === "JsonWebTokenError") {
+      throw new ApiError(401, "Invalid refresh token");
+    } else {
+      throw new ApiError(401, "Token verification failed");
+    }
+  }
+
+  // 3. Verify token type (should be "refresh")
+  if (decodedToken.type !== "refresh") {
+    throw new ApiError(401, "Invalid token type. Expected refresh token.");
+  }
+
+  // 4. Find job seeker and verify stored refresh token matches
+  const jobSeeker = await JobSeeker.findById(decodedToken.id).select("+refreshToken");
+
+  if (!jobSeeker) {
+    throw new ApiError(401, "Invalid refresh token: Job seeker not found");
+  }
+
+  // 5. Verify stored refresh token matches incoming token
+  if (jobSeeker.refreshToken !== incomingRefreshToken) {
+    // Token mismatch - possible token theft, invalidate all tokens
+    jobSeeker.refreshToken = null;
+    await jobSeeker.save({ select: "+refreshToken" });
+    throw new ApiError(401, "Refresh token mismatch. Please login again.");
+  }
+
+  // 6. Check if job seeker is active
+  if (jobSeeker.status === "Inactive" || jobSeeker.status === "Rejected") {
+    throw new ApiError(403, "Account is inactive. Please contact support.");
+  }
+
+  // 7. Generate new access token
+  const newAccessToken = generateAccessToken({
+    id: jobSeeker._id.toString(),
+    phone: jobSeeker.phone,
+    role: jobSeeker.role || "job-seeker",
+  });
+
+  // 8. Optional: Token rotation - generate new refresh token
+  // This is a security best practice: invalidate old refresh token, issue new one
+  const newRefreshToken = generateRefreshToken({
+    id: jobSeeker._id.toString(),
+    phone: jobSeeker.phone,
+  });
+
+  // 9. Save new refresh token to database
+  jobSeeker.refreshToken = newRefreshToken;
+  await jobSeeker.save({ select: "+refreshToken" });
+
+  // 10. Set new refresh token as HTTP-only cookie (optional, for web apps)
+  const cookieOptions = {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "strict",
+    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+  };
+  res.cookie("refreshToken", newRefreshToken, cookieOptions);
+
+  // 11. Return new tokens
+  return res
+    .status(200)
+    .json(
+      ApiResponse.success(
+        {
+          accessToken: newAccessToken,
+          refreshToken: newRefreshToken, // New refresh token (token rotation)
+        },
+        "Access token refreshed successfully"
+      )
+    );
+});
+
+/**
+ * Logout Job Seeker
+ * 
+ * Invalidates the refresh token by removing it from the database.
+ * Access tokens cannot be invalidated (they're stateless), but they'll expire naturally.
+ * 
+ * @route POST /api/job-seekers/logout
+ */
+export const logoutJobSeeker = asyncHandler(async (req, res) => {
+  // Extract refresh token
+  const refreshToken = 
+    req.body.refreshToken || 
+    req.cookies?.refreshToken;
+
+  if (refreshToken) {
+    // Find job seeker by refresh token and remove it
+    const jobSeeker = await JobSeeker.findOne({ refreshToken }).select("+refreshToken");
+    
+    if (jobSeeker) {
+      jobSeeker.refreshToken = null;
+      await jobSeeker.save({ select: "+refreshToken" });
+    }
+  }
+
+  // Clear refresh token cookie
+  res.clearCookie("refreshToken", {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "strict",
+  });
+
+  return res
+    .status(200)
+    .json(
+      ApiResponse.success(
+        null,
+        "Logout successful"
       )
     );
 });
