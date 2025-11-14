@@ -2,21 +2,24 @@ import { OTP } from "../models/otp.model.js";
 
 /**
  * Generate a 4-digit OTP
- * In development/testing: Always returns "1234" for testing
- * In production: Returns random 4-digit OTP
+ *
+ * Default behaviour (no env config):
+ *   - Always returns "1234" to simplify QA / staging tests.
+ *
+ * To enable random OTPs for production, set
+ *   USE_RANDOM_OTP=true
+ * and optionally override STATIC_TEST_OTP for a different fixed code.
  */
 export const generateOTP = () => {
-  // For development/testing: return fixed OTP
-  // Check if we should use testing OTP (development mode OR RETURN_OTP_IN_RESPONSE is set)
-  const isTestingMode = 
-    process.env.NODE_ENV === "development" || 
-    !process.env.NODE_ENV ||
-    process.env.RETURN_OTP_IN_RESPONSE === "true";
-  
-  if (isTestingMode) {
-    return "1234";
+  const staticOTP = process.env.STATIC_TEST_OTP || "1234";
+  const shouldUseRandomOTP =
+    process.env.USE_RANDOM_OTP === "true" &&
+    process.env.NODE_ENV === "production";
+
+  if (!shouldUseRandomOTP) {
+    return staticOTP;
   }
-  // For production: generate random OTP
+
   return Math.floor(1000 + Math.random() * 9000).toString();
 };
 
