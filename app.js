@@ -12,6 +12,7 @@ import { seedDefaultAdmin } from "./src/seeders/seedAdmin.js";
 import { seedCategories } from "./src/seeders/seedCategories.js";
 import { seedRoles } from "./src/seeders/seedRoles.js";
 import { seedStatesAndCities } from "./src/seeders/seedStatesAndCities.js";
+import { seedJobMeta } from "./src/seeders/seedJobMeta.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -31,6 +32,7 @@ await seedDefaultAdmin();
     await seedCategories();
     await seedRoles();
     await seedStatesAndCities();
+    await seedJobMeta();
     dbInitialized = true;
   }
 }
@@ -79,7 +81,17 @@ app.get("/test", (req, res) => {
 
 // -------------------- Global Error Handler --------------------
 app.use((err, req, res, next) => {
-  console.error(err);
+  // Enhanced error logging for debugging
+  console.error("❌ Error Details:", {
+    message: err.message,
+    name: err.name,
+    stack: err.stack,
+    url: req.url,
+    method: req.method,
+    body: req.body,
+    files: req.files ? Object.keys(req.files) : null,
+  });
+
   if (err instanceof ApiError) {
     return res.status(err.statusCode).json({
       success: false,
@@ -88,10 +100,17 @@ app.use((err, req, res, next) => {
       meta: err.meta || null,
     });
   }
+
+  // Return more details in development
+  const isDevelopment = process.env.NODE_ENV === "development";
+  
   res.status(500).json({
     success: false,
     message: "Internal Server Error",
-    data: null,
+    data: isDevelopment ? {
+      error: err.message,
+      name: err.name,
+    } : null,
     meta: null,
   });
 });

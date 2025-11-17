@@ -38,7 +38,10 @@ const recruiterSchema = new Schema(
 
     // Documents
     profilePhoto: {
-      type: String, // File path or URL
+      type: String, // Backward compatibility
+    },
+    companyLogo: {
+      type: String,
     },
     documents: [
       {
@@ -61,6 +64,20 @@ const recruiterSchema = new Schema(
       type: String,
       enum: ["Pending", "Active", "Inactive", "Rejected"],
       default: "Pending",
+    },
+
+    // Role (for auth tokens)
+    role: {
+      type: String,
+      default: "recruiter",
+      enum: ["recruiter"],
+    },
+
+    // Authentication
+    refreshToken: {
+      type: String,
+      default: null,
+      select: false,
     },
   },
   {

@@ -4,6 +4,11 @@ import ApiResponse from "../../utils/ApiResponse.js";
 import { asyncHandler } from "../../utils/asyncHandler.js";
 import { storeOTP, verifyOTP as verifyOTPFromService } from "../../utils/otpService.js";
 import { getFileUrl } from "../../middlewares/fileUpload.js";
+import {
+  generateAccessToken,
+  generateRefreshToken,
+  verifyRefreshToken,
+} from "../../utils/jwtToken.js";
 
 /**
  * Send OTP for mobile verification (Recruiter)
@@ -13,21 +18,29 @@ export const sendOTP = asyncHandler(async (req, res) => {
 
   // Check if recruiter already exists
   const existingRecruiter = await Recruiter.findOne({ phone });
-  if (existingRecruiter && existingRecruiter.phoneVerified) {
-    throw new ApiError(409, "Phone number already registered");
-  }
+
+  // Determine OTP purpose
+  const purpose = existingRecruiter ? "login" : "registration";
 
   // Generate and store OTP
-  const otp = await storeOTP(phone, "registration");
+  const otp = await storeOTP(phone, purpose);
 
   // In production, send OTP via SMS service here
-  console.log(`OTP for ${phone}: ${otp}`);
+  console.log(`OTP for ${phone} (${purpose}): ${otp}`);
+
+  const shouldReturnOTP =
+    process.env.NODE_ENV === "development" ||
+    process.env.RETURN_OTP_IN_RESPONSE === "true" ||
+    otp === "1234";
 
   return res
     .status(200)
     .json(
       ApiResponse.success(
-        { otp: process.env.NODE_ENV === "development" ? otp : undefined },
+        {
+          otp: shouldReturnOTP ? otp : undefined,
+          isExistingUser: !!existingRecruiter,
+        },
         "OTP sent successfully"
       )
     );
@@ -39,64 +52,111 @@ export const sendOTP = asyncHandler(async (req, res) => {
 export const verifyOTP = asyncHandler(async (req, res) => {
   const { phone, otp } = req.body;
 
-  // Verify OTP
-  const isValid = await verifyOTPFromService(phone, otp, "registration");
+  // Locate recruiter to determine purpose
+  let recruiter = await Recruiter.findOne({ phone }).select("+refreshToken");
+  const purpose = recruiter ? "login" : "registration";
+
+  const isValid = await verifyOTPFromService(phone, otp, purpose);
   if (!isValid) {
     throw new ApiError(400, "Invalid or expired OTP");
   }
-
-  // Create or update recruiter
-  let recruiter = await Recruiter.findOne({ phone });
 
   if (!recruiter) {
     recruiter = await Recruiter.create({
       phone,
       phoneVerified: true,
       registrationStep: 1,
+      role: "recruiter",
     });
   } else {
     recruiter.phoneVerified = true;
-    recruiter.registrationStep = 1;
-    await recruiter.save();
+    if (recruiter.registrationStep < 1) {
+      recruiter.registrationStep = 1;
+    }
   }
 
-  return res
-    .status(200)
-    .json(
-      ApiResponse.success(
-        { recruiter },
-        "OTP verified successfully"
-      )
-    );
+  // Generate tokens
+  const accessToken = generateAccessToken({
+    id: recruiter._id.toString(),
+    phone: recruiter.phone,
+    role: recruiter.role || "recruiter",
+  });
+
+  const refreshToken = generateRefreshToken({
+    id: recruiter._id.toString(),
+    phone: recruiter.phone,
+  });
+
+  recruiter.refreshToken = refreshToken;
+  await recruiter.save();
+
+  const safeRecruiter = {
+    _id: recruiter._id,
+    phone: recruiter.phone,
+    phoneVerified: recruiter.phoneVerified,
+    registrationStep: recruiter.registrationStep,
+    isRegistrationComplete: recruiter.isRegistrationComplete,
+    status: recruiter.status,
+    companyName: recruiter.companyName,
+    role: recruiter.role,
+  };
+
+  const cookieOptions = {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "strict",
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+  };
+  res.cookie("recruiterRefreshToken", refreshToken, cookieOptions);
+
+  return res.status(200).json(
+    ApiResponse.success(
+      {
+        accessToken,
+        refreshToken,
+        recruiter: safeRecruiter,
+        isExistingUser: purpose === "login",
+      },
+      purpose === "login" ? "Login successful" : "OTP verified successfully"
+    )
+  );
 });
 
 /**
  * Register Recruiter (Basic registration)
  */
 export const registerRecruiter = asyncHandler(async (req, res) => {
-  const { phone, companyName, email, state, city } = req.body;
+  const { phone, recruiterId, companyName, email, state, city } = req.body;
+
+  const identifier = recruiterId
+    ? { _id: recruiterId }
+    : { phone };
 
   // Find recruiter
-  const recruiter = await Recruiter.findOne({ phone });
-  if (!recruiter || !recruiter.phoneVerified) {
+  const recruiter = await Recruiter.findOne(identifier);
+  if (!recruiter) {
+    throw new ApiError(404, "Recruiter not found. Please verify OTP first.");
+  }
+  if (!recruiter.phoneVerified) {
     throw new ApiError(400, "Please verify your phone number first");
   }
 
   // Handle file uploads
-  const profilePhoto = req.files?.profilePhoto?.[0]
-    ? getFileUrl(req.files.profilePhoto[0].path)
+  const companyLogo = req.files?.companyLogo?.[0]
+    ? getFileUrl(req.files.companyLogo[0])
     : null;
   const documents = req.files?.documents
-    ? req.files.documents.map((file) => getFileUrl(file.path))
+    ? req.files.documents.map((file) => getFileUrl(file))
     : [];
 
   // Update recruiter
-  recruiter.companyName = companyName;
-  recruiter.email = email;
-  recruiter.state = state;
-  recruiter.city = city;
-  if (profilePhoto) {
-    recruiter.profilePhoto = profilePhoto;
+  recruiter.companyName = companyName || recruiter.companyName;
+  recruiter.email = email || recruiter.email;
+  recruiter.state = state || recruiter.state;
+  recruiter.city = city || recruiter.city;
+  if (companyLogo) {
+    recruiter.companyLogo = companyLogo;
+    recruiter.profilePhoto = companyLogo;
   }
   if (documents.length > 0) {
     recruiter.documents = documents;
@@ -107,14 +167,12 @@ export const registerRecruiter = asyncHandler(async (req, res) => {
 
   await recruiter.save();
 
-  return res
-    .status(200)
-    .json(
-      ApiResponse.success(
-        { recruiter },
-        "Registration completed successfully"
-      )
-    );
+  return res.status(200).json(
+    ApiResponse.success(
+      { recruiter },
+      "Registration completed successfully"
+    )
+  );
 });
 
 /**
@@ -137,5 +195,109 @@ export const getRecruiterByPhone = asyncHandler(async (req, res) => {
         "Recruiter fetched successfully"
       )
     );
+});
+
+/**
+ * Refresh recruiter access token
+ */
+export const refreshRecruiterAccessToken = asyncHandler(async (req, res) => {
+  const incomingRefreshToken =
+    req.body.refreshToken || req.cookies?.recruiterRefreshToken;
+
+  if (!incomingRefreshToken) {
+    throw new ApiError(401, "Refresh token is required");
+  }
+
+  let decodedToken;
+  try {
+    decodedToken = verifyRefreshToken(incomingRefreshToken);
+  } catch (error) {
+    if (error.name === "TokenExpiredError") {
+      throw new ApiError(401, "Refresh token expired. Please login again.");
+    } else if (error.name === "JsonWebTokenError") {
+      throw new ApiError(401, "Invalid refresh token");
+    }
+    throw new ApiError(401, "Token verification failed");
+  }
+
+  if (decodedToken.type !== "refresh") {
+    throw new ApiError(401, "Invalid token type. Expected refresh token.");
+  }
+
+  const recruiter = await Recruiter.findById(decodedToken.id).select("+refreshToken");
+  if (!recruiter) {
+    throw new ApiError(401, "Invalid refresh token: Recruiter not found");
+  }
+
+  if (recruiter.refreshToken !== incomingRefreshToken) {
+    recruiter.refreshToken = null;
+    await recruiter.save();
+    throw new ApiError(401, "Refresh token mismatch. Please login again.");
+  }
+
+  if (recruiter.status === "Inactive" || recruiter.status === "Rejected") {
+    throw new ApiError(403, "Account is inactive. Please contact support.");
+  }
+
+  const newAccessToken = generateAccessToken({
+    id: recruiter._id.toString(),
+    phone: recruiter.phone,
+    role: recruiter.role || "recruiter",
+  });
+
+  const newRefreshToken = generateRefreshToken({
+    id: recruiter._id.toString(),
+    phone: recruiter.phone,
+  });
+
+  recruiter.refreshToken = newRefreshToken;
+  await recruiter.save();
+
+  const cookieOptions = {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "strict",
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+  };
+  res.cookie("recruiterRefreshToken", newRefreshToken, cookieOptions);
+
+  return res.status(200).json(
+    ApiResponse.success(
+      {
+        accessToken: newAccessToken,
+        refreshToken: newRefreshToken,
+      },
+      "Access token refreshed successfully"
+    )
+  );
+});
+
+/**
+ * Logout recruiter
+ */
+export const logoutRecruiter = asyncHandler(async (req, res) => {
+  const incomingRefreshToken =
+    req.body.refreshToken || req.cookies?.recruiterRefreshToken;
+
+  if (incomingRefreshToken) {
+    const recruiter = await Recruiter.findOne({
+      refreshToken: incomingRefreshToken,
+    }).select("+refreshToken");
+
+    if (recruiter) {
+      recruiter.refreshToken = null;
+      await recruiter.save();
+    }
+  }
+
+  res.clearCookie("recruiterRefreshToken", {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "strict",
+  });
+
+  return res
+    .status(200)
+    .json(ApiResponse.success(null, "Logout successful"));
 });
 
