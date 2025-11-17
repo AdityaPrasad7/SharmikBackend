@@ -167,4 +167,3 @@ recruiterJobSchema.index({ jobTitle: "text", jobDescription: "text", city: "text
 
 export const RecruiterJob = model("RecruiterJob", recruiterJobSchema);
 
-

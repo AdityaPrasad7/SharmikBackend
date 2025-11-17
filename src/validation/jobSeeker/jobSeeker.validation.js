@@ -119,8 +119,9 @@ export const step2RegistrationSchema = Joi.object({
     .items(
       Joi.object({
         questionId: Joi.string().required(),
-        questionText: Joi.string().trim().required(),
         selectedOption: Joi.string().trim().required(),
+        // Optional fields for backward compatibility
+        questionText: Joi.string().trim().optional(),
         isCorrect: Joi.boolean().optional(),
       })
     )

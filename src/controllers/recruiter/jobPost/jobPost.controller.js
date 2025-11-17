@@ -1,7 +1,7 @@
-import ApiResponse from "../../utils/ApiResponse.js";
-import ApiError from "../../utils/ApiError.js";
-import { asyncHandler } from "../../utils/asyncHandler.js";
-import { RecruiterJob } from "../../models/recruiter/recruiterJob.model.js";
+import ApiResponse from "../../../utils/ApiResponse.js";
+import ApiError from "../../../utils/ApiError.js";
+import { asyncHandler } from "../../../utils/asyncHandler.js";
+import { RecruiterJob } from "../../../models/recruiter/jobPost/jobPost.model.js";
 
 const normalizeArray = (value) => {
   if (!value) return [];
@@ -116,5 +116,4 @@ export const createRecruiterJob = asyncHandler(async (req, res) => {
     .status(201)
     .json(ApiResponse.success(responsePayload, "Job posted successfully"));
 });
-
 

@@ -7,20 +7,23 @@ import {
   refreshRecruiterAccessToken,
   logoutRecruiter,
 } from "../../controllers/recruiter/recruiter.controller.js";
-import { createRecruiterJob } from "../../controllers/recruiter/recruiterJob.controller.js";
-import { getJobMeta } from "../../controllers/recruiter/jobMeta.controller.js";
+import {
+  getJobCategories,
+  getJobTypes,
+  getFacilities,
+  getJobMeta,
+} from "../../controllers/recruiter/jobPost/jobMeta.controller.js";
 import { validateRequest } from "../../middlewares/recruiter/validateRecruiter.js";
 import {
   sendOTPSchema,
   verifyOTPSchema,
   recruiterRegistrationSchema,
-  createRecruiterJobSchema,
 } from "../../validation/recruiter/recruiter.validation.js";
+import jobPostRoutes from "./jobPost/jobPost.routes.js";
 import {
   uploadFields,
   uploadToCloudinaryMiddleware,
 } from "../../middlewares/fileUpload.js";
-import { verifyRecruiterJWT } from "../../middlewares/recruiter/authRecruiter.js";
 
 const router = Router();
 
@@ -53,16 +56,16 @@ router.post(
 router.post("/refresh-token", refreshRecruiterAccessToken);
 router.post("/logout", logoutRecruiter);
 
-// Job Meta Data (Public - for job posting form)
+// Job Meta Data APIs (Public - for job posting form)
+// Separate endpoints for each section
+router.get("/job-categories", getJobCategories); // For Job Category selection buttons
+router.get("/job-types", getJobTypes); // For Job Type toggle buttons
+router.get("/facilities", getFacilities); // For Facilities toggle switches
+// Combined endpoint (optional - if frontend wants all data at once)
 router.get("/job-meta", getJobMeta);
 
-// Job Posting
-router.post(
-  "/jobs",
-  verifyRecruiterJWT,
-  validateRequest(createRecruiterJobSchema),
-  createRecruiterJob
-);
+// Job Posting Routes
+router.use("/", jobPostRoutes);
 
 // Get Recruiter by Phone
 router.get("/:phone", getRecruiterByPhone);

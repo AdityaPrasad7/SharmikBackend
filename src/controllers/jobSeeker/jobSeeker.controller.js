@@ -395,18 +395,38 @@ export const step2Registration = asyncHandler(async (req, res) => {
 
   // Process question answers and mark correct/incorrect
   const processedAnswers = questionAnswers.map((answer, index) => {
-    // Try to find question by text first, then by index
-    let question = questionSetQuestions.find(
-      (q) => q.text.trim().toLowerCase() === answer.questionText?.trim().toLowerCase()
-    );
+    // Find question by questionId (e.g., "q1", "q2", etc.)
+    // questionId format is typically "q1", "q2", etc. from the API response
+    let question;
     
-    // If not found by text, try by index
+    if (answer.questionId) {
+      // Extract number from questionId (e.g., "q1" -> 1, "q2" -> 2)
+      const questionIndexMatch = answer.questionId.match(/q(\d+)/i);
+      if (questionIndexMatch) {
+        const questionIndex = parseInt(questionIndexMatch[1]) - 1; // Convert to 0-based index
+        if (questionIndex >= 0 && questionIndex < questionSetQuestions.length) {
+          question = questionSetQuestions[questionIndex];
+        }
+      }
+    }
+    
+    // Fallback: Try to find by questionText (for backward compatibility)
+    if (!question && answer.questionText) {
+      question = questionSetQuestions.find(
+        (q) => q.text.trim().toLowerCase() === answer.questionText.trim().toLowerCase()
+      );
+    }
+    
+    // Fallback: Use index if questionId format doesn't match
     if (!question && index < questionSetQuestions.length) {
       question = questionSetQuestions[index];
     }
     
     if (!question) {
-      throw new ApiError(400, `Question not found: ${answer.questionText || `at index ${index}`}`);
+      throw new ApiError(
+        400, 
+        `Question not found for questionId: ${answer.questionId || `at index ${index}`}`
+      );
     }
 
     // Find the correct option
@@ -415,7 +435,7 @@ export const step2Registration = asyncHandler(async (req, res) => {
       correctOption.text.trim().toLowerCase() === answer.selectedOption?.trim().toLowerCase();
 
     return {
-      questionId: answer.questionId || question.text || `question_${index}`,
+      questionId: answer.questionId || `q${index + 1}`,
       questionText: question.text,
       selectedOption: answer.selectedOption,
       isCorrect: isCorrect || false,

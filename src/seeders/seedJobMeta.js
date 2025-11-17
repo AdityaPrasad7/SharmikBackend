@@ -1,4 +1,4 @@
-import { JobMeta } from "../models/recruiter/jobMeta.model.js";
+import { JobMeta } from "../models/recruiter/jobPost/jobMeta.model.js";
 
 /**
  * Seed Job Meta Data
