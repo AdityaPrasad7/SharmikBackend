@@ -555,7 +555,7 @@ export const step3Registration = asyncHandler(async (req, res) => {
   }
 
   // If has experience, experience certificate is required
-  if (experienceStatus.hasExperience && !experienceStatus.isFresher) {
+  if (experienceStatus) {
     if (!experienceCertificate) {
       throw new ApiError(400, "Experience certificate is required when you have experience");
     }

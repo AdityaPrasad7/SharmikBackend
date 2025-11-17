@@ -173,10 +173,7 @@ export const step3RegistrationSchema = Joi.object({
   yearOfPassing: Joi.string().trim().min(1).optional(), // Separate field option
   // Option 4: Percentage/Grade (separate field)
   percentageOrGrade: Joi.string().trim().min(1).optional(), // Separate field option
-  experienceStatus: Joi.object({
-    hasExperience: Joi.boolean().required(),
-    isFresher: Joi.boolean().required(),
-  }).required(),
+  experienceStatus: Joi.boolean().required(),
   // Files (resume, documents, experienceCertificate) will be handled via multer
 })
   .or("phone", "jobSeekerId") // At least one of phone or jobSeekerId is required

@@ -104,16 +104,10 @@ const jobSeekerSchema = new Schema(
       },
     },
 
-    // Experience Status
+    // Experience Status (true = has experience, false = is fresher)
     experienceStatus: {
-      hasExperience: {
-        type: Boolean,
-        default: false,
-      },
-      isFresher: {
-        type: Boolean,
-        default: true,
-      },
+      type: Boolean,
+      default: false,
     },
 
     // Registration Status

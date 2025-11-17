@@ -370,3 +370,4 @@ router.post(
 2. Get URLs from response
 3. Send URLs to `/register/step1` endpoint
 
+

@@ -457,3 +457,4 @@ request.fields['aadhaarCard'] = File(filePath).readAsStringSync();  // Sends fil
 request.files.add(await http.MultipartFile.fromPath('aadhaarCard', filePath));
 ```
 
+

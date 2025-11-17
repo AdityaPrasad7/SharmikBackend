@@ -52,3 +52,4 @@ Accepting all file types (`ACCEPT_ALL_FILES=true`) is convenient but less secure
 - **Storage:** Memory (files uploaded directly to Cloudinary)
 - **File Filter:** Configurable via `ACCEPT_ALL_FILES` env variable
 
+

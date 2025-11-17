@@ -50,13 +50,37 @@ export const validateRequest = (schema, property = "body") =>
         }
       }
       
-      // Parse experienceStatus if it's a JSON string
-      if (data.experienceStatus && typeof data.experienceStatus === "string") {
-        try {
-          data.experienceStatus = JSON.parse(data.experienceStatus);
-        } catch (error) {
-          throw new ApiError(400, "Invalid experienceStatus format. Must be a valid JSON object.");
+      // Convert experienceStatus string to boolean (form-data sends everything as strings)
+      // Supports both new format (boolean string) and old format (JSON object) for backward compatibility
+      if (data.experienceStatus !== undefined && data.experienceStatus !== null) {
+        if (typeof data.experienceStatus === "string") {
+          const trimmed = data.experienceStatus.trim();
+          const lowerValue = trimmed.toLowerCase();
+          
+          // New format: simple boolean string
+          if (lowerValue === "true" || lowerValue === "1") {
+            data.experienceStatus = true;
+          } else if (lowerValue === "false" || lowerValue === "0") {
+            data.experienceStatus = false;
+          } else {
+            // Old format: try to parse as JSON object and convert
+            try {
+              const parsed = JSON.parse(trimmed);
+              if (typeof parsed === "object" && parsed !== null) {
+                // Old format: {hasExperience: true, isFresher: false}
+                data.experienceStatus = parsed.hasExperience === true && parsed.isFresher === false;
+              } else {
+                throw new ApiError(400, "Invalid experienceStatus format. Must be 'true', 'false', or a boolean JSON object.");
+              }
+            } catch (parseError) {
+              throw new ApiError(400, "Invalid experienceStatus format. Must be 'true', 'false', or a valid JSON object.");
+            }
+          }
+        } else if (typeof data.experienceStatus === "object" && data.experienceStatus !== null) {
+          // Old format: already parsed object
+          data.experienceStatus = data.experienceStatus.hasExperience === true && data.experienceStatus.isFresher === false;
         }
+        // If it's already a boolean, keep it as is
       }
       
       // Parse questionAnswers if it's a JSON string
