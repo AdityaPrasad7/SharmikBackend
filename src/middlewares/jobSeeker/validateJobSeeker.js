@@ -41,12 +41,18 @@ export const validateRequest = (schema, property = "body") =>
         }
       }
       
-      // Parse education if it's a JSON string
+      // Handle education - supports both new format (simple text) and old format (JSON object) for backward compatibility
       if (data.education && typeof data.education === "string") {
+        // Try to parse as JSON (old format), if it fails, treat as plain text (new format)
         try {
-          data.education = JSON.parse(data.education);
+          const parsed = JSON.parse(data.education);
+          if (typeof parsed === "object" && parsed !== null && parsed.collegeInstituteName) {
+            // Old format: extract collegeInstituteName
+            data.education = parsed.collegeInstituteName;
+          }
+          // If parsing succeeds but doesn't have collegeInstituteName, keep as string (new format)
         } catch (error) {
-          throw new ApiError(400, "Invalid education format. Must be a valid JSON object.");
+          // Not JSON, treat as plain text (new format) - this is fine
         }
       }
       

@@ -148,38 +148,31 @@ export const step3RegistrationSchema = Joi.object({
     .messages({
       "string.pattern.base": "Invalid job seeker ID",
     }),
-  education: Joi.object({
-    collegeInstituteName: Joi.string().trim().min(1).required(),
-    // Option 1: City and State names (backward compatible)
-    city: Joi.string().trim().min(1).optional(),
-    state: Joi.string().trim().min(1).optional(),
-    yearOfPassing: Joi.string().trim().min(1).optional(), // Optional if provided separately
-    percentageOrGrade: Joi.string().trim().min(1).optional(), // Optional if provided separately
-  }).required(),
-  // Option 2: State and City IDs (from dropdowns)
+  education: Joi.string().trim().min(1).required(), // College/Institute name as simple text
   stateId: Joi.string()
     .pattern(/^[0-9a-fA-F]{24}$/)
-    .optional()
+    .required()
     .messages({
       "string.pattern.base": "Invalid state ID",
+      "any.required": "State ID is required",
     }),
   cityId: Joi.string()
     .pattern(/^[0-9a-fA-F]{24}$/)
-    .optional()
+    .required()
     .messages({
       "string.pattern.base": "Invalid city ID",
+      "any.required": "City ID is required",
     }),
-  // Option 3: Year of Passing (from years API - just the year value like "2023")
-  yearOfPassing: Joi.string().trim().min(1).optional(), // Separate field option
-  // Option 4: Percentage/Grade (separate field)
-  percentageOrGrade: Joi.string().trim().min(1).optional(), // Separate field option
+  yearOfPassing: Joi.string().trim().min(1).required().messages({
+    "any.required": "Year of passing is required",
+  }),
+  percentageOrGrade: Joi.string().trim().min(1).required().messages({
+    "any.required": "Percentage or Grade is required",
+  }),
   experienceStatus: Joi.boolean().required(),
   // Files (resume, documents, experienceCertificate) will be handled via multer
 })
-  .or("phone", "jobSeekerId") // At least one of phone or jobSeekerId is required
-  .or("education.state", "stateId") // At least one of state or stateId
-  .or("education.city", "cityId") // At least one of city or cityId
-  .or("education.yearOfPassing", "yearOfPassing"); // At least one of yearOfPassing in education or separate
+  .or("phone", "jobSeekerId"); // At least one of phone or jobSeekerId is required
 
 // Get Specialization Skills Schema
 export const getSpecializationSkillsSchema = Joi.object({

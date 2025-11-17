@@ -489,12 +489,11 @@ export const step3Registration = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Please complete step 2 first");
   }
 
-  // Resolve state and city names from IDs if provided
-  let stateName = education?.state;
-  let cityName = education?.city;
-  let yearValue = education?.yearOfPassing || yearOfPassing;
+  // Resolve state and city names from IDs
+  let stateName = null;
+  let cityName = null;
 
-  if (stateId && !stateName) {
+  if (stateId) {
     const stateDoc = await State.findById(stateId);
     if (!stateDoc) {
       throw new ApiError(404, "State not found");
@@ -502,7 +501,7 @@ export const step3Registration = asyncHandler(async (req, res) => {
     stateName = stateDoc.name;
   }
 
-  if (cityId && !cityName) {
+  if (cityId) {
     const cityDoc = await City.findById(cityId);
     if (!cityDoc) {
       throw new ApiError(404, "City not found");
@@ -516,18 +515,17 @@ export const step3Registration = asyncHandler(async (req, res) => {
   }
 
   // Build final education object
+  // education is now a simple string (college name)
   const finalEducation = {
-    collegeInstituteName: education.collegeInstituteName,
+    collegeInstituteName: education,
     city: cityName,
     state: stateName,
-    yearOfPassing: yearValue,
+    yearOfPassing: yearOfPassing,
   };
 
-  // Merge percentageOrGrade into education if provided separately
+  // Add percentageOrGrade if provided
   if (percentageOrGrade) {
     finalEducation.percentageOrGrade = percentageOrGrade;
-  } else if (education.percentageOrGrade) {
-    finalEducation.percentageOrGrade = education.percentageOrGrade;
   }
   
   // Validate required fields

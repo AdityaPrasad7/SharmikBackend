@@ -14,7 +14,9 @@ import {
   refreshAccessToken,
   logoutJobSeeker,
 } from "../../controllers/jobSeeker/jobSeeker.controller.js";
+import { getSuggestedJobs } from "../../controllers/jobSeeker/suggestedJobs.controller.js";
 import { validateRequest } from "../../middlewares/jobSeeker/validateJobSeeker.js";
+import { verifyJobSeekerJWT } from "../../middlewares/jobSeeker/authJobSeeker.js";
 import {
   sendOTPSchema,
   verifyOTPSchema,
@@ -118,6 +120,9 @@ router.post("/refresh-token", refreshAccessToken);
 
 // Logout Route (Public - no auth required, but should send refresh token)
 router.post("/logout", logoutJobSeeker);
+
+// Suggested Jobs - Requires authentication
+router.get("/suggested-jobs", verifyJobSeekerJWT, getSuggestedJobs);
 
 // Get Job Seeker by Phone - Must be last to avoid route conflicts
 router.get("/phone/:phone", getJobSeekerByPhone);
