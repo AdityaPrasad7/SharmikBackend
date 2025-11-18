@@ -141,7 +141,13 @@ export const step2RegistrationSchema = Joi.object({
 // Supports stateId/cityId/yearOfPassing from dropdowns OR state/city/yearOfPassing as names
 // Supports percentageOrGrade as separate field OR inside education object
 export const step3RegistrationSchema = Joi.object({
-  phone: phoneSchema.optional(),
+  phone: Joi.string()
+    .pattern(/^[6-9]\d{9}$/)
+    .optional()
+    .allow("")
+    .messages({
+      "string.pattern.base": "Phone number must be a valid 10-digit Indian mobile number",
+    }),
   jobSeekerId: Joi.string()
     .pattern(/^[0-9a-fA-F]{24}$/)
     .optional()
@@ -172,7 +178,10 @@ export const step3RegistrationSchema = Joi.object({
   experienceStatus: Joi.boolean().required(),
   // Files (resume, documents, experienceCertificate) will be handled via multer
 })
-  .or("phone", "jobSeekerId"); // At least one of phone or jobSeekerId is required
+  .or("phone", "jobSeekerId") // At least one of phone or jobSeekerId is required
+  .messages({
+    "object.missing": "Either phone or jobSeekerId is required",
+  });
 
 // Get Specialization Skills Schema
 export const getSpecializationSkillsSchema = Joi.object({
@@ -194,5 +203,33 @@ export const getSkillsByCategorySchema = Joi.object({
       "any.only": "Category must be one of: Non-Degree Holder, Diploma Holder, ITI Holder",
       "any.required": "Category is required",
     }),
+});
+
+// Application Schemas
+export const applyForJobSchema = Joi.object({
+  jobId: Joi.string()
+    .pattern(/^[0-9a-fA-F]{24}$/)
+    .required()
+    .messages({
+      "string.pattern.base": "Invalid job ID format",
+      "any.required": "Job ID is required",
+    }),
+  coverLetter: Joi.string().trim().max(5000).allow("").optional().messages({
+    "string.max": "Cover letter must not exceed 5000 characters",
+  }),
+  notes: Joi.string().trim().max(1000).allow("").optional().messages({
+    "string.max": "Notes must not exceed 1000 characters",
+  }),
+});
+
+export const getMyApplicationsSchema = Joi.object({
+  status: Joi.string()
+    .valid("Applied", "Shortlisted", "Rejected", "Withdrawn")
+    .optional()
+    .messages({
+      "any.only": "Status must be one of: Applied, Shortlisted, Rejected, Withdrawn",
+    }),
+  page: Joi.number().integer().min(1).optional(),
+  limit: Joi.number().integer().min(1).max(100).optional(),
 });
 

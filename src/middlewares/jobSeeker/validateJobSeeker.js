@@ -80,7 +80,7 @@ export const validateRequest = (schema, property = "body") =>
               }
             } catch (parseError) {
               throw new ApiError(400, "Invalid experienceStatus format. Must be 'true', 'false', or a valid JSON object.");
-            }
+        }
           }
         } else if (typeof data.experienceStatus === "object" && data.experienceStatus !== null) {
           // Old format: already parsed object

@@ -5,6 +5,7 @@ import cookieParser from "cookie-parser";
 import dotenv from "dotenv";
 import path from "path";
 import { fileURLToPath } from "url";
+import multer from "multer";
 import connectDB from "./src/config/db.js"; // centralized DB connection
 import ApiError from "./src/utils/ApiError.js";
 import routes from "./src/routes/index.js";
@@ -57,8 +58,9 @@ app.use(
 // -------------------- Middleware --------------------
 // Note: express.json and express.urlencoded automatically skip multipart/form-data
 // Multer will handle multipart/form-data requests
-app.use(express.json({ limit: "16kb" }));
-app.use(express.urlencoded({ extended: true, limit: "16kb" }));
+// Increased limits for JSON/URL-encoded data (though multipart/form-data is handled by multer)
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 app.use(cookieParser());
 app.use(express.static("public"));
 // Note: File uploads are now handled by Cloudinary, so static file serving for uploads is not needed
@@ -91,6 +93,50 @@ app.use((err, req, res, next) => {
     body: req.body,
     files: req.files ? Object.keys(req.files) : null,
   });
+
+  // Handle multer file size errors
+  if (err instanceof multer.MulterError) {
+    if (err.code === "LIMIT_FILE_SIZE") {
+      return res.status(413).json({
+        success: false,
+        message: "File too large. Maximum file size is 10MB per file.",
+        data: null,
+        meta: null,
+      });
+    }
+    if (err.code === "LIMIT_FIELD_SIZE") {
+      return res.status(413).json({
+        success: false,
+        message: "Request too large. Form field size exceeds 10MB limit.",
+        data: null,
+        meta: null,
+      });
+    }
+    if (err.code === "LIMIT_FILE_COUNT") {
+      return res.status(413).json({
+        success: false,
+        message: "Too many files. Maximum 10 files allowed.",
+        data: null,
+        meta: null,
+      });
+    }
+    return res.status(400).json({
+      success: false,
+      message: `File upload error: ${err.message}`,
+      data: null,
+      meta: null,
+    });
+  }
+
+  // Handle "Request Entity Too Large" errors
+  if (err.status === 413 || err.statusCode === 413 || err.message?.includes("too large") || err.message?.includes("Request Entity Too Large")) {
+    return res.status(413).json({
+      success: false,
+      message: "Request too large. Please reduce file sizes or form data size.",
+      data: null,
+      meta: null,
+    });
+  }
 
   if (err instanceof ApiError) {
     return res.status(err.statusCode).json({

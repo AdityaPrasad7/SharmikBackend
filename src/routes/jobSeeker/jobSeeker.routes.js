@@ -15,6 +15,11 @@ import {
   logoutJobSeeker,
 } from "../../controllers/jobSeeker/jobSeeker.controller.js";
 import { getSuggestedJobs } from "../../controllers/jobSeeker/suggestedJobs.controller.js";
+import {
+  applyForJob,
+  getMyApplications,
+  withdrawApplication,
+} from "../../controllers/jobSeeker/application.controller.js";
 import { validateRequest } from "../../middlewares/jobSeeker/validateJobSeeker.js";
 import { verifyJobSeekerJWT } from "../../middlewares/jobSeeker/authJobSeeker.js";
 import {
@@ -26,6 +31,8 @@ import {
   step3RegistrationSchema,
   getSpecializationSkillsSchema,
   getSkillsByCategorySchema,
+  applyForJobSchema,
+  getMyApplicationsSchema,
 } from "../../validation/jobSeeker/jobSeeker.validation.js";
 import { uploadFields, uploadToCloudinaryMiddleware } from "../../middlewares/fileUpload.js";
 
@@ -123,6 +130,27 @@ router.post("/logout", logoutJobSeeker);
 
 // Suggested Jobs - Requires authentication
 router.get("/suggested-jobs", verifyJobSeekerJWT, getSuggestedJobs);
+
+// Application Routes - Requires authentication
+router.post(
+  "/apply",
+  verifyJobSeekerJWT,
+  validateRequest(applyForJobSchema),
+  applyForJob
+);
+
+router.get(
+  "/applications",
+  verifyJobSeekerJWT,
+  validateRequest(getMyApplicationsSchema, "query"),
+  getMyApplications
+);
+
+router.patch(
+  "/applications/:applicationId/withdraw",
+  verifyJobSeekerJWT,
+  withdrawApplication
+);
 
 // Get Job Seeker by Phone - Must be last to avoid route conflicts
 router.get("/phone/:phone", getJobSeekerByPhone);

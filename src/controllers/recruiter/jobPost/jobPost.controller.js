@@ -1,6 +1,7 @@
 import ApiResponse from "../../../utils/ApiResponse.js";
 import ApiError from "../../../utils/ApiError.js";
 import { asyncHandler } from "../../../utils/asyncHandler.js";
+import mongoose from "mongoose";
 import { RecruiterJob } from "../../../models/recruiter/jobPost/jobPost.model.js";
 import { City } from "../../../models/location/city.model.js";
 import { Recruiter } from "../../../models/recruiter/recruiter.model.js";
@@ -562,6 +563,86 @@ export const getAllJobPosts = asyncHandler(async (req, res) => {
       searchTerm 
         ? `Found ${totalJobs} job${totalJobs !== 1 ? "s" : ""} for "${searchTerm}"`
         : "Jobs fetched successfully"
+    )
+  );
+});
+
+/**
+ * Get Job Post by ID (Public endpoint)
+ * Returns detailed information about a specific job post
+ * Used by job seekers to view full job details
+ */
+export const getJobPostById = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+
+  if (!id) {
+    throw new ApiError(400, "Job ID is required");
+  }
+
+  // Validate MongoDB ObjectId format
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    throw new ApiError(400, "Invalid job ID format");
+  }
+
+  // Find job by ID and populate recruiter details
+  const job = await RecruiterJob.findById(id)
+    .populate("recruiter", "companyName companyLogo city state email phone")
+    .lean();
+
+  if (!job) {
+    throw new ApiError(404, "Job not found");
+  }
+
+  // Format salary label
+  const salaryLabel = `₹${Math.round(job.expectedSalary.min).toLocaleString("en-IN")} - ₹${Math.round(
+    job.expectedSalary.max
+  ).toLocaleString("en-IN")}/${job.expectedSalary.payPeriod === "monthly" ? "month" : "year"}`;
+
+  // Format experience label
+  const experienceLabel = job.experienceRange.maxYears
+    ? `${job.experienceRange.minYears}-${job.experienceRange.maxYears} YoE`
+    : `${job.experienceRange.minYears}+ YoE`;
+
+  // Format response with all job details
+  const formattedJob = {
+    _id: job._id,
+    jobTitle: job.jobTitle,
+    jobDescription: job.jobDescription,
+    city: job.city,
+    expectedSalary: job.expectedSalary,
+    salaryLabel,
+    employeeCount: job.employeeCount,
+    jobType: job.jobType,
+    employmentMode: job.employmentMode,
+    categories: job.categories,
+    tags: job.tags,
+    benefits: job.benefits,
+    experienceRange: job.experienceRange,
+    experienceLabel,
+    qualifications: job.qualifications,
+    responsibilities: job.responsibilities,
+    aboutCompany: job.aboutCompany,
+    companySnapshot: job.companySnapshot,
+    recruiter: job.recruiter,
+    status: job.status,
+    applicationCount: job.applicationCount,
+    createdAt: job.createdAt,
+    updatedAt: job.updatedAt,
+    summary: {
+      salaryLabel,
+      experienceLabel,
+      jobTags: [
+        job.jobType,
+        job.employmentMode,
+        experienceLabel,
+      ],
+    },
+  };
+
+  return res.status(200).json(
+    ApiResponse.success(
+      { job: formattedJob },
+      "Job details fetched successfully"
     )
   );
 });

@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
   createRecruiterJob,
   getAllJobPosts,
+  getJobPostById,
 } from "../../../controllers/recruiter/jobPost/jobPost.controller.js";
 import { validateRequest } from "../../../middlewares/recruiter/validateRecruiter.js";
 import { createRecruiterJobSchema } from "../../../validation/recruiter/jobPost/jobPost.validation.js";
@@ -15,6 +16,13 @@ const router = Router();
  * Public endpoint - no authentication required
  */
 router.get("/jobs", getAllJobPosts);
+
+/**
+ * GET /api/recruiters/jobs/:id
+ * Get a specific job post by ID
+ * Public endpoint - no authentication required
+ */
+router.get("/jobs/:id", getJobPostById);
 
 /**
  * POST /api/recruiters/jobs
