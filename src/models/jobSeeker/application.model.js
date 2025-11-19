@@ -41,3 +41,5 @@ applicationSchema.index({ job: 1, jobSeeker: 1 }, { unique: true });
 
 export const Application = model("Application", applicationSchema);
 
+
+

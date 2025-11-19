@@ -168,7 +168,7 @@ export const verifyOTP = asyncHandler(async (req, res) => {
  * Supports both state/city names and stateId/cityId from dropdowns
  */
 export const registerNonDegree = asyncHandler(async (req, res) => {
-  const { phone, state, city, stateId, cityId, specializationId, selectedSkills } = req.body;
+  const { phone, name, email, gender, dateOfBirth, state, city, stateId, cityId, specializationId, selectedSkills } = req.body;
   console.log("registerNonDegree req.body:", req.body);
 
   // Find job seeker
@@ -245,6 +245,10 @@ export const registerNonDegree = asyncHandler(async (req, res) => {
   }
 
   // Update job seeker
+  jobSeeker.name = name;
+  jobSeeker.email = email;
+  jobSeeker.gender = gender ? gender.toLowerCase().trim() : null;
+  jobSeeker.dateOfBirth = dateOfBirth ? new Date(dateOfBirth) : null;
   jobSeeker.state = stateName;
   jobSeeker.city = cityName;
   jobSeeker.specializationId = specializationId;
@@ -271,7 +275,7 @@ export const registerNonDegree = asyncHandler(async (req, res) => {
  * Step 1 Registration (Diploma/ITI Holder) - Upload Aadhaar and Profile Photo
  */
 export const step1Registration = asyncHandler(async (req, res) => {
-  const { phone } = req.body;
+  const { phone, name, email, gender, dateOfBirth } = req.body;
 
   // Find job seeker
   let jobSeeker = await JobSeeker.findOne({ phone });
@@ -303,6 +307,10 @@ export const step1Registration = asyncHandler(async (req, res) => {
   }
 
   // Update job seeker
+  jobSeeker.name = name;
+  jobSeeker.email = email;
+  jobSeeker.gender = gender ? gender.toLowerCase().trim() : null;
+  jobSeeker.dateOfBirth = dateOfBirth ? new Date(dateOfBirth) : null;
   jobSeeker.aadhaarCard = aadhaarCard;
   jobSeeker.profilePhoto = profilePhoto;
   jobSeeker.registrationStep = 2;

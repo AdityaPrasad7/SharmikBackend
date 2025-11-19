@@ -27,6 +27,25 @@ const jobSeekerSchema = new Schema(
       default: "Worker",
     },
 
+    // Personal Information
+    name: {
+      type: String,
+      trim: true,
+    },
+    email: {
+      type: String,
+      trim: true,
+      lowercase: true,
+    },
+    gender: {
+      type: String,
+      enum: ["male", "female", "prefer not to say"],
+      trim: true,
+    },
+    dateOfBirth: {
+      type: Date,
+    },
+
     // Location
     state: {
       type: String,

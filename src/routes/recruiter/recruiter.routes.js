@@ -19,7 +19,8 @@ import {
   verifyOTPSchema,
   recruiterRegistrationSchema,
 } from "../../validation/recruiter/recruiter.validation.js";
-import jobPostRoutes from "./jobPost/jobPost.routes.js";
+import jobPostRoutes from "../jobPost/jobPost.routes.js";
+import dashboardRoutes from "./dashboard/dashboard.routes.js";
 import {
   uploadFields,
   uploadToCloudinaryMiddleware,
@@ -55,6 +56,9 @@ router.post(
 // Auth token utilities
 router.post("/refresh-token", refreshRecruiterAccessToken);
 router.post("/logout", logoutRecruiter);
+
+// Dashboard Routes
+router.use("/", dashboardRoutes);
 
 // Job Meta Data APIs (Public - for job posting form)
 // Separate endpoints for each section

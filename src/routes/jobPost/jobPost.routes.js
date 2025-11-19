@@ -3,10 +3,10 @@ import {
   createRecruiterJob,
   getAllJobPosts,
   getJobPostById,
-} from "../../../controllers/recruiter/jobPost/jobPost.controller.js";
-import { validateRequest } from "../../../middlewares/recruiter/validateRecruiter.js";
-import { createRecruiterJobSchema } from "../../../validation/recruiter/jobPost/jobPost.validation.js";
-import { verifyRecruiterJWT } from "../../../middlewares/recruiter/authRecruiter.js";
+} from "../../controllers/recruiter/jobPost/jobPost.controller.js";
+import { validateRequest } from "../../middlewares/recruiter/validateRecruiter.js";
+import { createRecruiterJobSchema } from "../../validation/recruiter/jobPost/jobPost.validation.js";
+import { verifyRecruiterJWT } from "../../middlewares/recruiter/authRecruiter.js";
 
 const router = Router();
 

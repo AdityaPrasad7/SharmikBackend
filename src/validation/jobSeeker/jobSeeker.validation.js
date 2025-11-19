@@ -59,6 +59,28 @@ export const verifyOTPSchema = Joi.object({
 // Supports both: state/city (names) OR stateId/cityId (IDs from dropdowns)
 export const nonDegreeRegistrationSchema = Joi.object({
   phone: phoneSchema,
+  // Personal Information
+  name: Joi.string().trim().min(1).required().messages({
+    "string.min": "Name is required",
+    "any.required": "Name is required",
+  }),
+  email: Joi.string().email().required().messages({
+    "string.email": "Please provide a valid email address",
+    "any.required": "Email is required",
+  }),
+  gender: Joi.string()
+    .trim()
+    .lowercase()
+    .valid("male", "female", "prefer not to say")
+    .required()
+    .messages({
+      "any.only": "Gender must be one of: male, female, prefer not to say",
+      "any.required": "Gender is required",
+    }),
+  dateOfBirth: Joi.date().required().messages({
+    "date.base": "Please provide a valid date of birth",
+    "any.required": "Date of birth is required",
+  }),
   // Option 1: State and City names (backward compatible)
   state: stateSchema.optional(),
   city: citySchema.optional(),
@@ -87,6 +109,28 @@ export const nonDegreeRegistrationSchema = Joi.object({
 // Step 1 Registration Schema (Diploma/ITI Holder)
 export const step1RegistrationSchema = Joi.object({
   phone: phoneSchema,
+  // Personal Information
+  name: Joi.string().trim().min(1).required().messages({
+    "string.min": "Name is required",
+    "any.required": "Name is required",
+  }),
+  email: Joi.string().email().required().messages({
+    "string.email": "Please provide a valid email address",
+    "any.required": "Email is required",
+  }),
+  gender: Joi.string()
+    .trim()
+    .lowercase()
+    .valid("male", "female", "prefer not to say")
+    .required()
+    .messages({
+      "any.only": "Gender must be one of: male, female, prefer not to say",
+      "any.required": "Gender is required",
+    }),
+  dateOfBirth: Joi.date().required().messages({
+    "date.base": "Please provide a valid date of birth",
+    "any.required": "Date of birth is required",
+  }),
   // category is optional - already set in verify-otp and stored in job seeker record
   // Files will be handled separately via multer
 });
