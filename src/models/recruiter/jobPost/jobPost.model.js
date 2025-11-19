@@ -111,6 +111,12 @@ const recruiterJobSchema = new Schema(
       default: "Onsite",
       index: true,
     },
+    jobSeekerCategory: {
+      type: String,
+      enum: ["Non-Degree Holder", "Diploma Holder", "ITI Holder"],
+      required: true,
+      index: true,
+    },
     categories: [
       {
         type: String,
@@ -118,6 +124,12 @@ const recruiterJobSchema = new Schema(
       },
     ],
     tags: [
+      {
+        type: String,
+        trim: true,
+      },
+    ],
+    skills: [
       {
         type: String,
         trim: true,

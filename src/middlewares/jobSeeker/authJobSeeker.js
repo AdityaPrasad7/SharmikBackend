@@ -80,3 +80,56 @@ export const verifyJobSeekerJWT = asyncHandler(async (req, res, next) => {
   next();
 });
 
+/**
+ * Optional Job Seeker JWT Middleware
+ * 
+ * This middleware is similar to verifyJobSeekerJWT but doesn't throw errors if token is missing
+ * It only attaches job seeker to request if token is valid
+ * 
+ * Usage:
+ * router.get("/jobs", optionalJobSeekerAuth, getAllJobPosts);
+ */
+export const optionalJobSeekerAuth = asyncHandler(async (req, res, next) => {
+  // 1. Extract token from request
+  const token = extractToken(req);
+
+  // If no token, continue without authentication (public access)
+  if (!token) {
+    return next();
+  }
+
+  // 2. Verify token signature and expiration
+  let decodedToken;
+  try {
+    decodedToken = verifyAccessToken(token);
+  } catch (error) {
+    // If token is invalid, continue without authentication (public access)
+    return next();
+  }
+
+  // 3. Verify token type (should be "access")
+  if (decodedToken.type !== "access") {
+    return next();
+  }
+
+  // 4. Find job seeker in database
+  const jobSeeker = await JobSeeker.findById(decodedToken.id).select("-refreshToken");
+
+  if (!jobSeeker) {
+    return next();
+  }
+
+  // 5. Check if job seeker is active
+  if (jobSeeker.status === "Inactive" || jobSeeker.status === "Rejected") {
+    return next();
+  }
+
+  // 6. Attach job seeker to request object
+  req.jobSeeker = jobSeeker;
+  req.jobSeekerId = jobSeeker._id;
+  req.accessToken = token;
+
+  // 7. Continue to next middleware/controller
+  next();
+});
+

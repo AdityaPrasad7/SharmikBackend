@@ -46,36 +46,42 @@ export const getSuggestedJobs = asyncHandler(async (req, res) => {
     );
   }
 
+  // Normalize user skills: trim and filter empty strings
+  const normalizedUserSkills = userSkills
+    .map((skill) => skill.trim())
+    .filter((skill) => skill.length > 0);
+
   // Build filter for suggested jobs
   const filter = {
     status: "Open", // Only show open jobs
+    jobSeekerCategory: jobSeeker.category, // Only show jobs for this job seeker's category
   };
 
-  // Match jobs based on skills
-  // Search in: categories, tags, qualifications, job title, job description
-  const skillSearchConditions = userSkills.map(skill => {
-    const skillRegex = new RegExp(skill.trim(), "i"); // Case-insensitive
-    
-    return {
-      $or: [
-        // Match in job title
-        { jobTitle: { $regex: skillRegex } },
-        // Match in job description
-        { jobDescription: { $regex: skillRegex } },
-        // Match in categories (array field)
-        { categories: skillRegex },
-        // Match in tags (array field)
-        { tags: skillRegex },
-        // Match in qualifications (array field)
-        { qualifications: skillRegex },
-        // Match in responsibilities (array field)
-        { responsibilities: skillRegex },
-      ]
-    };
-  });
-
-  // Use $or to match any of the skills
-  filter.$or = skillSearchConditions;
+  // Match jobs based on skills field
+  // If job's skills array contains at least one skill from job seeker's skills, show that job
+  // Use $in operator to check if any of the job seeker's skills exist in the job's skills array
+  if (normalizedUserSkills.length > 0) {
+    filter.skills = { $in: normalizedUserSkills };
+  } else {
+    // If no skills, return empty result (already handled above, but keeping as safety)
+    return res.status(200).json(
+      ApiResponse.success(
+        {
+          jobs: [],
+          pagination: {
+            currentPage: 1,
+            totalPages: 0,
+            totalJobs: 0,
+            limit: parseInt(limit),
+            hasNextPage: false,
+            hasPrevPage: false,
+          },
+          message: "No skills found. Please complete your profile with skills to get job suggestions.",
+        },
+        "No suggested jobs available"
+      )
+    );
+  }
 
   // Pagination
   const pageNumber = Math.max(1, parseInt(page));
@@ -104,7 +110,7 @@ export const getSuggestedJobs = asyncHandler(async (req, res) => {
   const totalJobs = await RecruiterJob.countDocuments(filter);
   const totalPages = Math.ceil(totalJobs / limitNumber);
 
-  // Format jobs with summary
+  // Format jobs with summary and matched skills
   const formattedJobs = jobs.map((job) => {
     const salaryLabel = `₹${Math.round(job.expectedSalary.min).toLocaleString("en-IN")} - ₹${Math.round(
       job.expectedSalary.max
@@ -113,6 +119,12 @@ export const getSuggestedJobs = asyncHandler(async (req, res) => {
     const experienceLabel = job.experienceRange.maxYears
       ? `${job.experienceRange.minYears}-${job.experienceRange.maxYears} YoE`
       : `${job.experienceRange.minYears}+ YoE`;
+
+    // Find which skills matched between job seeker and job
+    const jobSkills = (job.skills || []).map((s) => s.trim());
+    const matchedSkills = normalizedUserSkills.filter((userSkill) =>
+      jobSkills.includes(userSkill)
+    );
 
     return {
       _id: job._id,
@@ -126,6 +138,8 @@ export const getSuggestedJobs = asyncHandler(async (req, res) => {
       employmentMode: job.employmentMode,
       categories: job.categories,
       tags: job.tags,
+      skills: jobSkills,
+      matchedSkills: matchedSkills, // Skills that matched between job seeker and job
       benefits: job.benefits,
       experienceRange: job.experienceRange,
       experienceLabel,
@@ -145,6 +159,7 @@ export const getSuggestedJobs = asyncHandler(async (req, res) => {
           job.employmentMode,
           experienceLabel,
         ],
+        matchedSkillsCount: matchedSkills.length,
       },
     };
   });
@@ -161,8 +176,8 @@ export const getSuggestedJobs = asyncHandler(async (req, res) => {
           hasNextPage: pageNumber < totalPages,
           hasPrevPage: pageNumber > 1,
         },
-        userSkills: userSkills, // Include user's skills in response
-        matchedSkillsCount: userSkills.length,
+        userSkills: normalizedUserSkills, // Include user's skills in response
+        matchedSkillsCount: normalizedUserSkills.length,
       },
       `Found ${totalJobs} suggested job${totalJobs !== 1 ? "s" : ""} based on your skills`
     )

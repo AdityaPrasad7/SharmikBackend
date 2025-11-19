@@ -64,6 +64,13 @@ export const createRecruiterJobSchema = Joi.object({
     "any.only": "Job type must be one of: Full Time, Part Time, Contract",
   }),
   employmentMode: Joi.string().valid("Onsite", "Remote", "Hybrid").default("Onsite"),
+  jobSeekerCategory: Joi.string()
+    .valid("Non-Degree Holder", "Diploma Holder", "ITI Holder")
+    .required()
+    .messages({
+      "any.required": "Job seeker category is required",
+      "any.only": "Job seeker category must be one of: Non-Degree Holder, Diploma Holder, ITI Holder",
+    }),
   categories: Joi.alternatives()
     .try(stringArray.min(1), Joi.string().trim().min(1))
     .required()
@@ -71,6 +78,12 @@ export const createRecruiterJobSchema = Joi.object({
       "any.required": "At least one job category is required",
     }),
   tags: Joi.alternatives().try(stringArray, Joi.string().trim()),
+  skills: Joi.alternatives()
+    .try(stringArray.min(1), Joi.string().trim().min(1))
+    .optional()
+    .messages({
+      "array.min": "At least one skill is required if skills are provided",
+    }),
   benefits: benefitsSchema,
   experienceMinYears: Joi.number().min(0).default(0),
   experienceMaxYears: Joi.number()
@@ -92,7 +105,7 @@ export const createRecruiterJobSchema = Joi.object({
     }
   };
 
-  ["categories", "tags", "qualifications", "responsibilities"].forEach(normalizeField);
+  ["categories", "tags", "skills", "qualifications", "responsibilities"].forEach(normalizeField);
 
   return cloned;
 });

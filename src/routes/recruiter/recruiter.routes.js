@@ -67,6 +67,7 @@ router.get("/job-types", getJobTypes); // For Job Type toggle buttons
 router.get("/facilities", getFacilities); // For Facilities toggle switches
 // Combined endpoint (optional - if frontend wants all data at once)
 router.get("/job-meta", getJobMeta);
+// Note: Job Seeker Categories are available at /api/job-seekers/categories (public endpoint)
 
 // Job Posting Routes
 router.use("/", jobPostRoutes);

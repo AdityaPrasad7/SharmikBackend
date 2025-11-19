@@ -5,10 +5,38 @@ import mongoose from "mongoose";
 import { RecruiterJob } from "../../../models/recruiter/jobPost/jobPost.model.js";
 import { City } from "../../../models/location/city.model.js";
 import { Recruiter } from "../../../models/recruiter/recruiter.model.js";
+import { Specialization } from "../../../models/admin/specialization/specialization.model.js";
+import { Application } from "../../../models/jobSeeker/application.model.js";
 
 const normalizeArray = (value) => {
   if (!value) return [];
   return Array.isArray(value) ? value : [value];
+};
+
+/**
+ * Get all available skills from specializations
+ * Same logic as /api/skills endpoint
+ * Returns array of unique skill strings
+ */
+const getAllAvailableSkills = async () => {
+  const specializations = await Specialization.find({ status: "Active" })
+    .select("skills")
+    .lean();
+
+  // Collect all skills from all specializations
+  const allSkills = [];
+  specializations.forEach((spec) => {
+    if (spec.skills && Array.isArray(spec.skills)) {
+      allSkills.push(...spec.skills);
+    }
+  });
+
+  // Remove duplicates and trim
+  const uniqueSkills = [...new Set(allSkills)]
+    .filter((skill) => skill && skill.trim()) // Remove empty strings
+    .map((skill) => skill.trim()); // Trim whitespace
+
+  return uniqueSkills;
 };
 
 /**
@@ -82,8 +110,10 @@ export const createRecruiterJob = asyncHandler(async (req, res) => {
     employeeCount,
     jobType,
     employmentMode,
+    jobSeekerCategory,
     categories,
     tags,
+    skills,
     benefits = {},
     experienceMinYears = 0,
     experienceMaxYears,
@@ -94,8 +124,37 @@ export const createRecruiterJob = asyncHandler(async (req, res) => {
 
   const normalizedCategories = normalizeArray(categories);
   const normalizedTags = normalizeArray(tags);
+  const normalizedSkills = normalizeArray(skills);
   const normalizedQualifications = normalizeArray(qualifications);
   const normalizedResponsibilities = normalizeArray(responsibilities);
+
+  // Validate skills if provided - ensure they exist in /api/skills
+  if (normalizedSkills.length > 0) {
+    // Trim all skills before validation
+    const trimmedSkills = normalizedSkills.map((skill) => skill.trim()).filter((skill) => skill);
+    
+    if (trimmedSkills.length === 0) {
+      throw new ApiError(400, "Skills cannot be empty. Please provide valid skills from /api/skills endpoint.");
+    }
+
+    const availableSkills = await getAllAvailableSkills();
+    
+    // Check if all provided skills exist in available skills
+    const invalidSkills = trimmedSkills.filter(
+      (skill) => !availableSkills.includes(skill)
+    );
+
+    if (invalidSkills.length > 0) {
+      throw new ApiError(
+        400,
+        `Invalid skills: ${invalidSkills.join(", ")}. Please use skills from /api/skills endpoint.`
+      );
+    }
+
+    // Use trimmed skills for saving
+    normalizedSkills.length = 0;
+    normalizedSkills.push(...trimmedSkills);
+  }
 
   const job = await RecruiterJob.create({
     recruiter: recruiter._id,
@@ -111,8 +170,10 @@ export const createRecruiterJob = asyncHandler(async (req, res) => {
     employeeCount,
     jobType,
     employmentMode,
+    jobSeekerCategory,
     categories: normalizedCategories,
     tags: normalizedTags,
+    skills: normalizedSkills,
     benefits: {
       foodProvided: benefits.foodProvided ?? false,
       accommodationProvided: benefits.accommodationProvided ?? false,
@@ -179,6 +240,12 @@ export const getAllJobPosts = asyncHandler(async (req, res) => {
 
   // Build filter object
   const filter = {};
+  
+  // Filter by job seeker category if authenticated job seeker
+  // If job seeker is authenticated, only show jobs matching their category
+  if (req.jobSeeker && req.jobSeeker.category) {
+    filter.jobSeekerCategory = req.jobSeeker.category;
+  }
   
   // Global search - searches across job title, description, city, company name, categories, tags, qualifications
   const searchTerm = search || q;
@@ -643,6 +710,153 @@ export const getJobPostById = asyncHandler(async (req, res) => {
     ApiResponse.success(
       { job: formattedJob },
       "Job details fetched successfully"
+    )
+  );
+});
+
+/**
+ * Get All Applicants (Recruiter)
+ * Returns all applicants for jobs posted by the authenticated recruiter
+ * Requires: Recruiter authentication (JWT token)
+ * 
+ * Query Parameters:
+ * - jobId: Optional - Filter applicants for a specific job
+ * - status: Optional - Filter by application status (Applied, Shortlisted, Rejected, Withdrawn)
+ * - page: Optional - Page number (default: 1)
+ * - limit: Optional - Items per page (default: 10)
+ */
+export const getAllApplicants = asyncHandler(async (req, res) => {
+  const recruiter = req.recruiter;
+
+  if (!recruiter) {
+    throw new ApiError(401, "Unauthorized: Recruiter not found");
+  }
+
+  const { jobId, status, page = 1, limit = 10 } = req.query;
+
+  // Build filter - only show applicants for jobs posted by this recruiter
+  const filter = {};
+
+  // If jobId is provided, validate it belongs to this recruiter
+  if (jobId) {
+    if (!mongoose.Types.ObjectId.isValid(jobId)) {
+      throw new ApiError(400, "Invalid job ID format");
+    }
+
+    // Verify the job belongs to this recruiter
+    const job = await RecruiterJob.findOne({
+      _id: jobId,
+      recruiter: recruiter._id,
+    });
+
+    if (!job) {
+      throw new ApiError(404, "Job not found or you don't have permission to view applicants for this job");
+    }
+
+    filter.job = jobId;
+  } else {
+    // Get all job IDs posted by this recruiter
+    const recruiterJobs = await RecruiterJob.find({
+      recruiter: recruiter._id,
+    }).select("_id").lean();
+
+    const jobIds = recruiterJobs.map((job) => job._id);
+
+    if (jobIds.length === 0) {
+      // No jobs posted, return empty result
+      return res.status(200).json(
+        ApiResponse.success(
+          {
+            applicants: [],
+            pagination: {
+              currentPage: 1,
+              totalPages: 0,
+              totalApplicants: 0,
+              limit: parseInt(limit),
+              hasNextPage: false,
+              hasPrevPage: false,
+            },
+          },
+          "No applicants found"
+        )
+      );
+    }
+
+    filter.job = { $in: jobIds };
+  }
+
+  // Filter by status if provided
+  if (status) {
+    const validStatuses = ["Applied", "Shortlisted", "Rejected", "Withdrawn"];
+    if (!validStatuses.includes(status)) {
+      throw new ApiError(
+        400,
+        `Invalid status. Valid statuses: ${validStatuses.join(", ")}`
+      );
+    }
+    filter.status = status;
+  }
+
+  // Pagination
+  const pageNumber = Math.max(1, parseInt(page));
+  const limitNumber = Math.min(100, Math.max(1, parseInt(limit)));
+  const skip = (pageNumber - 1) * limitNumber;
+
+  // Fetch applications with pagination
+  const applications = await Application.find(filter)
+    .populate({
+      path: "job",
+      select: "jobTitle jobDescription city expectedSalary jobType employmentMode status skills categories tags companySnapshot",
+      populate: {
+        path: "recruiter",
+        select: "companyName companyLogo city state",
+      },
+    })
+    .populate({
+      path: "jobSeeker",
+      select: "name email phone gender dateOfBirth category state city specializationId selectedSkills skills profilePhoto resume aadhaarCard education experienceStatus status",
+      populate: {
+        path: "specializationId",
+        select: "name skills",
+      },
+    })
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(limitNumber)
+    .lean();
+
+  // Get total count
+  const totalApplicants = await Application.countDocuments(filter);
+  const totalPages = Math.ceil(totalApplicants / limitNumber);
+
+  // Format applications for response
+  const formattedApplications = applications.map((application) => {
+    return {
+      _id: application._id,
+      job: application.job,
+      jobSeeker: application.jobSeeker,
+      status: application.status,
+      coverLetter: application.coverLetter || "",
+      notes: application.notes || "",
+      createdAt: application.createdAt,
+      updatedAt: application.updatedAt,
+    };
+  });
+
+  return res.status(200).json(
+    ApiResponse.success(
+      {
+        applicants: formattedApplications,
+        pagination: {
+          currentPage: pageNumber,
+          totalPages,
+          totalApplicants,
+          limit: limitNumber,
+          hasNextPage: pageNumber < totalPages,
+          hasPrevPage: pageNumber > 1,
+        },
+      },
+      `Found ${totalApplicants} applicant${totalApplicants !== 1 ? "s" : ""}`
     )
   );
 });
