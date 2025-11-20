@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import { JobSeeker } from "../../models/jobSeeker/jobSeeker.model.js";
+import { Recruiter } from "../../models/recruiter/recruiter.model.js";
 import { Specialization } from "../../models/admin/specialization/specialization.model.js";
 import { QuestionSet } from "../../models/admin/questionSet/questionSet.model.js";
 import { Category } from "../../models/category/category.model.js";
@@ -20,6 +21,12 @@ import { generateAccessToken, generateRefreshToken, verifyRefreshToken } from ".
  */
 export const sendOTP = asyncHandler(async (req, res) => {
   const { phone, category } = req.body;
+
+  // Cross-table validation: Check if phone exists in Recruiter table
+  const existingRecruiter = await Recruiter.findOne({ phone });
+  if (existingRecruiter) {
+    throw new ApiError(400, "Invalid number");
+  }
 
   // Check if job seeker already exists
   const existingJobSeeker = await JobSeeker.findOne({ phone });
@@ -71,6 +78,12 @@ export const sendOTP = asyncHandler(async (req, res) => {
  */
 export const verifyOTP = asyncHandler(async (req, res) => {
   const { phone, otp, category } = req.body;
+
+  // Cross-table validation: Check if phone exists in Recruiter table
+  const existingRecruiter = await Recruiter.findOne({ phone });
+  if (existingRecruiter) {
+    throw new ApiError(400, "Invalid number");
+  }
 
   // Check if user exists to determine OTP purpose
   let jobSeeker = await JobSeeker.findOne({ phone });
@@ -170,6 +183,12 @@ export const verifyOTP = asyncHandler(async (req, res) => {
 export const registerNonDegree = asyncHandler(async (req, res) => {
   const { phone, name, email, gender, dateOfBirth, state, city, stateId, cityId, specializationId, selectedSkills } = req.body;
   console.log("registerNonDegree req.body:", req.body);
+
+  // Cross-table validation: Check if phone exists in Recruiter table
+  const existingRecruiter = await Recruiter.findOne({ phone });
+  if (existingRecruiter) {
+    throw new ApiError(400, "Invalid number");
+  }
 
   // Find job seeker
   let jobSeeker = await JobSeeker.findOne({ phone });
@@ -276,6 +295,12 @@ export const registerNonDegree = asyncHandler(async (req, res) => {
  */
 export const step1Registration = asyncHandler(async (req, res) => {
   const { phone, name, email, gender, dateOfBirth } = req.body;
+
+  // Cross-table validation: Check if phone exists in Recruiter table
+  const existingRecruiter = await Recruiter.findOne({ phone });
+  if (existingRecruiter) {
+    throw new ApiError(400, "Invalid number");
+  }
 
   // Find job seeker
   let jobSeeker = await JobSeeker.findOne({ phone });

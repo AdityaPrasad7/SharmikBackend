@@ -1,0 +1,532 @@
+import ApiResponse from "../../../utils/ApiResponse.js";
+import ApiError from "../../../utils/ApiError.js";
+import { asyncHandler } from "../../../utils/asyncHandler.js";
+import mongoose from "mongoose";
+import { Application } from "../../../models/jobSeeker/application.model.js";
+import { RecruiterJob } from "../../../models/recruiter/jobPost/jobPost.model.js";
+import { JobSeeker } from "../../../models/jobSeeker/jobSeeker.model.js";
+
+/**
+ * Get All Applications (Recruiter)
+ * Returns all applications from job seekers for jobs created by the authenticated recruiter
+ * This is a flat list of all applications across all jobs
+ * Requires: Recruiter authentication (JWT token)
+ */
+export const getJobsWithApplications = asyncHandler(async (req, res) => {
+  const recruiter = req.recruiter; // From auth middleware
+  const {
+    jobStatus,
+    applicationStatus,
+    page = 1,
+    limit = 10,
+    sortBy = "createdAt",
+    sortOrder = "desc",
+  } = req.query;
+
+  // Get all job IDs for this recruiter
+  const jobFilter = { recruiter: recruiter._id };
+  
+  // Optional job status filter
+  if (jobStatus) {
+    jobFilter.status = jobStatus;
+  }
+
+  const allJobIds = await RecruiterJob.find(jobFilter).select("_id").lean();
+  const jobIds = allJobIds.map((job) => job._id);
+
+  if (jobIds.length === 0) {
+    return res.status(200).json(
+      ApiResponse.success(
+        {
+          applications: [],
+          pagination: {
+            currentPage: 1,
+            totalPages: 0,
+            totalApplications: 0,
+            limit: parseInt(limit),
+            hasNextPage: false,
+            hasPrevPage: false,
+          },
+        },
+        "No jobs found"
+      )
+    );
+  }
+
+  // Build filter for applications
+  const applicationFilter = { job: { $in: jobIds } };
+  
+  // Optional application status filter
+  if (applicationStatus) {
+    applicationFilter.status = applicationStatus;
+  } else {
+    // By default, exclude withdrawn applications
+    applicationFilter.status = { $ne: "Withdrawn" };
+  }
+
+  // Pagination
+  const pageNumber = Math.max(1, parseInt(page));
+  const limitNumber = Math.min(100, Math.max(1, parseInt(limit)));
+  const skip = (pageNumber - 1) * limitNumber;
+
+  // Sort options
+  const sortOptions = {};
+  if (sortBy === "status") {
+    sortOptions.status = sortOrder === "asc" ? 1 : -1;
+  } else if (sortBy === "jobTitle") {
+    // For job title sorting, we'll need to populate first
+    sortOptions.createdAt = sortOrder === "asc" ? 1 : -1;
+  } else {
+    sortOptions[sortBy] = sortOrder === "asc" ? 1 : -1;
+  }
+
+  // Fetch applications with job and job seeker details
+  let applications = await Application.find(applicationFilter)
+    .populate({
+      path: "job",
+      select: "jobTitle jobDescription city expectedSalary jobType employmentMode status skills vacancyCount applicationCount createdAt",
+    })
+    .populate({
+      path: "jobSeeker",
+      select:
+        "name email phone gender dateOfBirth category state city specializationId selectedSkills skills profilePhoto resume education experienceStatus aadhaarCard status",
+      populate: {
+        path: "specializationId",
+        select: "name skills",
+      },
+    })
+    .sort(sortOptions)
+    .skip(skip)
+    .limit(limitNumber)
+    .lean();
+
+  // If sorting by jobTitle, sort after population
+  if (sortBy === "jobTitle") {
+    applications.sort((a, b) => {
+      const aTitle = a.job?.jobTitle || "";
+      const bTitle = b.job?.jobTitle || "";
+      return sortOrder === "asc"
+        ? aTitle.localeCompare(bTitle)
+        : bTitle.localeCompare(aTitle);
+    });
+  }
+
+  // Format applications
+  const formattedApplications = applications.map((application) => {
+    const job = application.job;
+    const jobSeeker = application.jobSeeker;
+
+    return {
+      _id: application._id,
+      status: application.status,
+      coverLetter: application.coverLetter || "",
+      notes: application.notes || "",
+      appliedAt: application.createdAt,
+      updatedAt: application.updatedAt,
+      job: {
+        _id: job?._id,
+        jobTitle: job?.jobTitle,
+        jobDescription: job?.jobDescription,
+        city: job?.city,
+        expectedSalary: job?.expectedSalary,
+        jobType: job?.jobType,
+        employmentMode: job?.employmentMode,
+        status: job?.status,
+        skills: job?.skills || [],
+        vacancyCount: job?.vacancyCount,
+        applicationCount: job?.applicationCount,
+        createdAt: job?.createdAt,
+      },
+      jobSeeker: {
+        _id: jobSeeker?._id,
+        name: jobSeeker?.name,
+        email: jobSeeker?.email,
+        phone: jobSeeker?.phone,
+        gender: jobSeeker?.gender,
+        dateOfBirth: jobSeeker?.dateOfBirth,
+        category: jobSeeker?.category,
+        state: jobSeeker?.state,
+        city: jobSeeker?.city,
+        profilePhoto: jobSeeker?.profilePhoto,
+        resume: jobSeeker?.resume,
+        aadhaarCard: jobSeeker?.aadhaarCard,
+        skills: jobSeeker?.selectedSkills || jobSeeker?.skills || [],
+        specialization: jobSeeker?.specializationId
+          ? {
+              _id: jobSeeker.specializationId._id,
+              name: jobSeeker.specializationId.name,
+              skills: jobSeeker.specializationId.skills || [],
+            }
+          : null,
+        education: jobSeeker?.education || null,
+        experienceStatus: jobSeeker?.experienceStatus,
+        status: jobSeeker?.status,
+      },
+    };
+  });
+
+  // Get total count
+  const totalApplications = await Application.countDocuments(applicationFilter);
+  const totalPages = Math.ceil(totalApplications / limitNumber);
+
+  // Get overall statistics
+  const stats = {
+    total: await Application.countDocuments({
+      job: { $in: jobIds },
+      status: { $ne: "Withdrawn" },
+    }),
+    applied: await Application.countDocuments({
+      job: { $in: jobIds },
+      status: "Applied",
+    }),
+    shortlisted: await Application.countDocuments({
+      job: { $in: jobIds },
+      status: "Shortlisted",
+    }),
+    rejected: await Application.countDocuments({
+      job: { $in: jobIds },
+      status: "Rejected",
+    }),
+    withdrawn: await Application.countDocuments({
+      job: { $in: jobIds },
+      status: "Withdrawn",
+    }),
+  };
+
+  return res.status(200).json(
+    ApiResponse.success(
+      {
+        applications: formattedApplications,
+        statistics: stats,
+        pagination: {
+          currentPage: pageNumber,
+          totalPages,
+          totalApplications,
+          limit: limitNumber,
+          hasNextPage: pageNumber < totalPages,
+          hasPrevPage: pageNumber > 1,
+        },
+      },
+      "Applications fetched successfully"
+    )
+  );
+});
+
+/**
+ * Get All Applicants for a Job (Recruiter)
+ * Returns all applicants for a specific job post
+ * Requires: Recruiter authentication (JWT token)
+ */
+export const getJobApplicants = asyncHandler(async (req, res) => {
+  const recruiter = req.recruiter; // From auth middleware
+  const { jobId } = req.params;
+  const {
+    status,
+    page = 1,
+    limit = 10,
+    sortBy = "createdAt",
+    sortOrder = "desc",
+  } = req.query;
+
+  // Validate job ID
+  if (!mongoose.Types.ObjectId.isValid(jobId)) {
+    throw new ApiError(400, "Invalid job ID format");
+  }
+
+  // Verify job exists and belongs to this recruiter
+  const job = await RecruiterJob.findById(jobId);
+  if (!job) {
+    throw new ApiError(404, "Job not found");
+  }
+
+  if (job.recruiter.toString() !== recruiter._id.toString()) {
+    throw new ApiError(403, "You are not authorized to view applicants for this job");
+  }
+
+  // Build filter
+  const filter = { job: jobId };
+  if (status) {
+    filter.status = status;
+  } else {
+    // By default, exclude withdrawn applications
+    filter.status = { $ne: "Withdrawn" };
+  }
+
+  // Pagination
+  const pageNumber = Math.max(1, parseInt(page));
+  const limitNumber = Math.min(100, Math.max(1, parseInt(limit)));
+  const skip = (pageNumber - 1) * limitNumber;
+
+  // Sort options
+  const sortOptions = {};
+  if (sortBy === "status") {
+    sortOptions.status = sortOrder === "asc" ? 1 : -1;
+  } else {
+    sortOptions[sortBy] = sortOrder === "asc" ? 1 : -1;
+  }
+
+  // Fetch applications with job seeker details
+  const applications = await Application.find(filter)
+    .populate({
+      path: "jobSeeker",
+      select:
+        "name email phone gender dateOfBirth category state city specializationId selectedSkills skills profilePhoto resume education experienceStatus aadhaarCard status",
+      populate: {
+        path: "specializationId",
+        select: "name skills",
+      },
+    })
+    .sort(sortOptions)
+    .skip(skip)
+    .limit(limitNumber)
+    .lean();
+
+  // Format applications with job seeker details
+  const formattedApplications = applications.map((application) => {
+    const jobSeeker = application.jobSeeker;
+    return {
+      _id: application._id,
+      status: application.status,
+      coverLetter: application.coverLetter || "",
+      notes: application.notes || "",
+      appliedAt: application.createdAt,
+      updatedAt: application.updatedAt,
+      jobSeeker: {
+        _id: jobSeeker._id,
+        name: jobSeeker.name,
+        email: jobSeeker.email,
+        phone: jobSeeker.phone,
+        gender: jobSeeker.gender,
+        dateOfBirth: jobSeeker.dateOfBirth,
+        category: jobSeeker.category,
+        state: jobSeeker.state,
+        city: jobSeeker.city,
+        profilePhoto: jobSeeker.profilePhoto,
+        resume: jobSeeker.resume,
+        aadhaarCard: jobSeeker.aadhaarCard,
+        skills: jobSeeker.selectedSkills || jobSeeker.skills || [],
+        specialization: jobSeeker.specializationId
+          ? {
+              _id: jobSeeker.specializationId._id,
+              name: jobSeeker.specializationId.name,
+              skills: jobSeeker.specializationId.skills || [],
+            }
+          : null,
+        education: jobSeeker.education || null,
+        experienceStatus: jobSeeker.experienceStatus,
+        status: jobSeeker.status,
+      },
+    };
+  });
+
+  // Get total count
+  const totalApplications = await Application.countDocuments(filter);
+  const totalPages = Math.ceil(totalApplications / limitNumber);
+
+  // Get application statistics
+  const stats = {
+    total: await Application.countDocuments({ job: jobId, status: { $ne: "Withdrawn" } }),
+    applied: await Application.countDocuments({ job: jobId, status: "Applied" }),
+    shortlisted: await Application.countDocuments({ job: jobId, status: "Shortlisted" }),
+    rejected: await Application.countDocuments({ job: jobId, status: "Rejected" }),
+    withdrawn: await Application.countDocuments({ job: jobId, status: "Withdrawn" }),
+  };
+
+  return res.status(200).json(
+    ApiResponse.success(
+      {
+        job: {
+          _id: job._id,
+          jobTitle: job.jobTitle,
+          jobDescription: job.jobDescription,
+          city: job.city,
+          status: job.status,
+        },
+        applications: formattedApplications,
+        statistics: stats,
+        pagination: {
+          currentPage: pageNumber,
+          totalPages,
+          totalApplications,
+          limit: limitNumber,
+          hasNextPage: pageNumber < totalPages,
+          hasPrevPage: pageNumber > 1,
+        },
+      },
+      "Job applicants fetched successfully"
+    )
+  );
+});
+
+/**
+ * Shortlist an Applicant (Recruiter)
+ * Updates the application status to "Shortlisted"
+ * Requires: Recruiter authentication (JWT token)
+ */
+export const shortlistApplicant = asyncHandler(async (req, res) => {
+  const recruiter = req.recruiter; // From auth middleware
+  const { applicationId } = req.params;
+  const { notes } = req.body;
+
+  // Validate application ID
+  if (!mongoose.Types.ObjectId.isValid(applicationId)) {
+    throw new ApiError(400, "Invalid application ID format");
+  }
+
+  // Find the application
+  const application = await Application.findById(applicationId).populate({
+    path: "job",
+    select: "recruiter jobTitle",
+  });
+
+  if (!application) {
+    throw new ApiError(404, "Application not found");
+  }
+
+  // Verify the job belongs to this recruiter
+  if (application.job.recruiter.toString() !== recruiter._id.toString()) {
+    throw new ApiError(403, "You are not authorized to update this application");
+  }
+
+  // Check if already shortlisted
+  if (application.status === "Shortlisted") {
+    throw new ApiError(400, "Application is already shortlisted");
+  }
+
+  // Check if withdrawn (cannot shortlist withdrawn applications)
+  if (application.status === "Withdrawn") {
+    throw new ApiError(400, "Cannot shortlist a withdrawn application");
+  }
+
+  // Update application status
+  application.status = "Shortlisted";
+  if (notes !== undefined) {
+    application.notes = notes || "";
+  }
+  await application.save();
+
+  // Populate job seeker details for response
+  await application.populate({
+    path: "jobSeeker",
+    select:
+      "name email phone gender dateOfBirth category state city specializationId selectedSkills skills profilePhoto resume education experienceStatus aadhaarCard status",
+    populate: {
+      path: "specializationId",
+      select: "name skills",
+    },
+  });
+
+  return res.status(200).json(
+    ApiResponse.success(
+      {
+        application: {
+          _id: application._id,
+          status: application.status,
+          coverLetter: application.coverLetter || "",
+          notes: application.notes || "",
+          appliedAt: application.createdAt,
+          updatedAt: application.updatedAt,
+          job: {
+            _id: application.job._id,
+            jobTitle: application.job.jobTitle,
+          },
+          jobSeeker: {
+            _id: application.jobSeeker._id,
+            name: application.jobSeeker.name,
+            email: application.jobSeeker.email,
+            phone: application.jobSeeker.phone,
+            profilePhoto: application.jobSeeker.profilePhoto,
+          },
+        },
+      },
+      "Applicant shortlisted successfully"
+    )
+  );
+});
+
+/**
+ * Reject an Applicant (Recruiter)
+ * Updates the application status to "Rejected"
+ * Requires: Recruiter authentication (JWT token)
+ */
+export const rejectApplicant = asyncHandler(async (req, res) => {
+  const recruiter = req.recruiter; // From auth middleware
+  const { applicationId } = req.params;
+  const { notes } = req.body;
+
+  // Validate application ID
+  if (!mongoose.Types.ObjectId.isValid(applicationId)) {
+    throw new ApiError(400, "Invalid application ID format");
+  }
+
+  // Find the application
+  const application = await Application.findById(applicationId).populate({
+    path: "job",
+    select: "recruiter jobTitle",
+  });
+
+  if (!application) {
+    throw new ApiError(404, "Application not found");
+  }
+
+  // Verify the job belongs to this recruiter
+  if (application.job.recruiter.toString() !== recruiter._id.toString()) {
+    throw new ApiError(403, "You are not authorized to update this application");
+  }
+
+  // Check if already rejected
+  if (application.status === "Rejected") {
+    throw new ApiError(400, "Application is already rejected");
+  }
+
+  // Check if withdrawn (cannot reject withdrawn applications)
+  if (application.status === "Withdrawn") {
+    throw new ApiError(400, "Cannot reject a withdrawn application");
+  }
+
+  // Update application status
+  application.status = "Rejected";
+  if (notes !== undefined) {
+    application.notes = notes || "";
+  }
+  await application.save();
+
+  // Populate job seeker details for response
+  await application.populate({
+    path: "jobSeeker",
+    select:
+      "name email phone gender dateOfBirth category state city specializationId selectedSkills skills profilePhoto resume education experienceStatus aadhaarCard status",
+    populate: {
+      path: "specializationId",
+      select: "name skills",
+    },
+  });
+
+  return res.status(200).json(
+    ApiResponse.success(
+      {
+        application: {
+          _id: application._id,
+          status: application.status,
+          coverLetter: application.coverLetter || "",
+          notes: application.notes || "",
+          appliedAt: application.createdAt,
+          updatedAt: application.updatedAt,
+          job: {
+            _id: application.job._id,
+            jobTitle: application.job.jobTitle,
+          },
+          jobSeeker: {
+            _id: application.jobSeeker._id,
+            name: application.jobSeeker.name,
+            email: application.jobSeeker.email,
+            phone: application.jobSeeker.phone,
+            profilePhoto: application.jobSeeker.profilePhoto,
+          },
+        },
+      },
+      "Applicant rejected successfully"
+    )
+  );
+});
+

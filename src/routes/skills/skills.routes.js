@@ -12,3 +12,4 @@ router.get("/", getAllSkills);
 
 export default router;
 
+

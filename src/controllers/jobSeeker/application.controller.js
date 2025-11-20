@@ -59,9 +59,21 @@ export const applyForJob = asyncHandler(async (req, res) => {
       await existingApplication.save();
 
       // Increment application count if it was withdrawn before
-      await RecruiterJob.findByIdAndUpdate(jobId, {
-        $inc: { applicationCount: 1 },
-      });
+      const updatedJob = await RecruiterJob.findByIdAndUpdate(
+        jobId,
+        {
+          $inc: { applicationCount: 1 },
+        },
+        { new: true }
+      );
+
+      // Auto-deactivate job if application count reaches or exceeds vacancy count
+      if (updatedJob && updatedJob.vacancyCount && updatedJob.applicationCount >= updatedJob.vacancyCount) {
+        if (updatedJob.status === "Open") {
+          updatedJob.status = "Closed";
+          await updatedJob.save();
+        }
+      }
 
       return res.status(200).json(
         ApiResponse.success(
@@ -84,10 +96,22 @@ export const applyForJob = asyncHandler(async (req, res) => {
     status: "Applied",
   });
 
-  // Increment application count on job
-  await RecruiterJob.findByIdAndUpdate(jobId, {
-    $inc: { applicationCount: 1 },
-  });
+  // Increment application count on job and check if vacancy is filled
+  const updatedJob = await RecruiterJob.findByIdAndUpdate(
+    jobId,
+    {
+      $inc: { applicationCount: 1 },
+    },
+    { new: true }
+  );
+
+  // Auto-deactivate job if application count reaches or exceeds vacancy count
+  if (updatedJob && updatedJob.vacancyCount && updatedJob.applicationCount >= updatedJob.vacancyCount) {
+    if (updatedJob.status === "Open") {
+      updatedJob.status = "Closed";
+      await updatedJob.save();
+    }
+  }
 
   // Populate job and job seeker details for response
   await application.populate([

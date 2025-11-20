@@ -21,6 +21,7 @@ import {
 } from "../../validation/recruiter/recruiter.validation.js";
 import jobPostRoutes from "../jobPost/jobPost.routes.js";
 import dashboardRoutes from "./dashboard/dashboard.routes.js";
+import applicationRoutes from "./application/application.routes.js";
 import {
   uploadFields,
   uploadToCloudinaryMiddleware,
@@ -59,6 +60,9 @@ router.post("/logout", logoutRecruiter);
 
 // Dashboard Routes
 router.use("/", dashboardRoutes);
+
+// Application Routes (for viewing jobs with applications and applicants)
+router.use("/", applicationRoutes);
 
 // Job Meta Data APIs (Public - for job posting form)
 // Separate endpoints for each section

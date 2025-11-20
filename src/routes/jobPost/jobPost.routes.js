@@ -3,7 +3,8 @@ import {
   createRecruiterJob,
   getAllJobPosts,
   getJobPostById,
-  getAllApplicants,
+  updateVacancyCount,
+  deactivateJob,
 } from "../../controllers/recruiter/jobPost/jobPost.controller.js";
 import { validateRequest } from "../../middlewares/recruiter/validateRecruiter.js";
 import { createRecruiterJobSchema } from "../../validation/recruiter/jobPost/jobPost.validation.js";
@@ -39,11 +40,19 @@ router.post(
 );
 
 /**
- * GET /api/recruiters/jobs/applicants
- * Get all applicants for jobs posted by the authenticated recruiter
+ * PATCH /api/recruiters/jobs/:jobId/vacancy-count
+ * Update vacancy count for a job post
+ * Body: { vacancyCount: number }
  * Requires: Recruiter authentication (JWT token)
  */
-router.get("/jobs/applicants", verifyRecruiterJWT, getAllApplicants);
+router.patch("/jobs/:jobId/vacancy-count", verifyRecruiterJWT, updateVacancyCount);
+
+/**
+ * PATCH /api/recruiters/jobs/:jobId/deactivate
+ * Manually deactivate/close a job post
+ * Requires: Recruiter authentication (JWT token)
+ */
+router.patch("/jobs/:jobId/deactivate", verifyRecruiterJWT, deactivateJob);
 
 export default router;
 

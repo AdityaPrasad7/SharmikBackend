@@ -1,4 +1,5 @@
 import { Recruiter } from "../../models/recruiter/recruiter.model.js";
+import { JobSeeker } from "../../models/jobSeeker/jobSeeker.model.js";
 import ApiError from "../../utils/ApiError.js";
 import ApiResponse from "../../utils/ApiResponse.js";
 import { asyncHandler } from "../../utils/asyncHandler.js";
@@ -15,6 +16,12 @@ import {
  */
 export const sendOTP = asyncHandler(async (req, res) => {
   const { phone } = req.body;
+
+  // Cross-table validation: Check if phone exists in JobSeeker table
+  const existingJobSeeker = await JobSeeker.findOne({ phone });
+  if (existingJobSeeker) {
+    throw new ApiError(400, "Invalid number");
+  }
 
   // Check if recruiter already exists
   const existingRecruiter = await Recruiter.findOne({ phone });
@@ -51,6 +58,12 @@ export const sendOTP = asyncHandler(async (req, res) => {
  */
 export const verifyOTP = asyncHandler(async (req, res) => {
   const { phone, otp } = req.body;
+
+  // Cross-table validation: Check if phone exists in JobSeeker table
+  const existingJobSeeker = await JobSeeker.findOne({ phone });
+  if (existingJobSeeker) {
+    throw new ApiError(400, "Invalid number");
+  }
 
   // Locate recruiter to determine purpose
   let recruiter = await Recruiter.findOne({ phone }).select("+refreshToken");
@@ -139,6 +152,15 @@ export const registerRecruiter = asyncHandler(async (req, res) => {
   }
   if (!recruiter.phoneVerified) {
     throw new ApiError(400, "Please verify your phone number first");
+  }
+
+  // Cross-table validation: Check if phone exists in JobSeeker table
+  const existingJobSeeker = await JobSeeker.findOne({ phone: recruiter.phone });
+  if (existingJobSeeker) {
+    throw new ApiError(
+      400,
+      "This phone number is already registered as a job seeker. Please use the job seeker login portal or use a different phone number."
+    );
   }
 
   // Handle file uploads

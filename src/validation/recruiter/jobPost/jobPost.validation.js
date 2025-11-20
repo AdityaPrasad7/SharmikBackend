@@ -59,6 +59,12 @@ export const createRecruiterJobSchema = Joi.object({
     "number.integer": "Employee count must be an integer",
     "number.min": "Employee count must be at least 1",
   }),
+  vacancyCount: Joi.number().integer().min(1).required().messages({
+    "any.required": "Vacancy count is required",
+    "number.base": "Vacancy count must be a number",
+    "number.integer": "Vacancy count must be an integer",
+    "number.min": "Vacancy count must be at least 1",
+  }),
   jobType: Joi.string().valid("Full Time", "Part Time", "Contract").required().messages({
     "any.required": "Job type is required",
     "any.only": "Job type must be one of: Full Time, Part Time, Contract",

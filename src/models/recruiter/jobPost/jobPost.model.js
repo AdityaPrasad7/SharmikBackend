@@ -169,6 +169,12 @@ const recruiterJobSchema = new Schema(
       type: Number,
       default: 0,
     },
+    vacancyCount: {
+      type: Number,
+      required: true,
+      min: 1,
+      default: 1,
+    },
   },
   {
     timestamps: true,
