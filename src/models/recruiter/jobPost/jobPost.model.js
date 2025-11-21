@@ -56,6 +56,22 @@ const experienceSchema = new Schema(
   { _id: false }
 );
 
+const ageRangeSchema = new Schema(
+  {
+    minAge: {
+      type: Number,
+      min: 18,
+      max: 100,
+    },
+    maxAge: {
+      type: Number,
+      min: 18,
+      max: 100,
+    },
+  },
+  { _id: false }
+);
+
 const companySnapshotSchema = new Schema(
   {
     name: String,
@@ -141,6 +157,10 @@ const recruiterJobSchema = new Schema(
     },
     experienceRange: {
       type: experienceSchema,
+      default: () => ({}),
+    },
+    preferredAgeRange: {
+      type: ageRangeSchema,
       default: () => ({}),
     },
     qualifications: [

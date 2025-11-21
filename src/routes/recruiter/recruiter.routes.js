@@ -22,6 +22,7 @@ import {
 import jobPostRoutes from "../jobPost/jobPost.routes.js";
 import dashboardRoutes from "./dashboard/dashboard.routes.js";
 import applicationRoutes from "./application/application.routes.js";
+import coinRoutes from "./coin.routes.js";
 import {
   uploadFields,
   uploadToCloudinaryMiddleware,
@@ -63,6 +64,9 @@ router.use("/", dashboardRoutes);
 
 // Application Routes (for viewing jobs with applications and applicants)
 router.use("/", applicationRoutes);
+
+// Coin Routes
+router.use("/coins", coinRoutes);
 
 // Job Meta Data APIs (Public - for job posting form)
 // Separate endpoints for each section

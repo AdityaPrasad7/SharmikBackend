@@ -66,6 +66,13 @@ const recruiterSchema = new Schema(
       default: "Pending",
     },
 
+    // Coin Balance
+    coinBalance: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
     // Role (for auth tokens)
     role: {
       type: String,

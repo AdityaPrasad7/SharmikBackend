@@ -276,7 +276,7 @@ export const registerNonDegree = asyncHandler(async (req, res) => {
   jobSeeker.profilePhoto = profilePhoto;
   jobSeeker.registrationStep = 4;
   jobSeeker.isRegistrationComplete = true;
-  jobSeeker.status = "Pending";
+  jobSeeker.status = "Active";
 
   await jobSeeker.save();
 
@@ -604,7 +604,7 @@ export const step3Registration = asyncHandler(async (req, res) => {
   }
   jobSeeker.registrationStep = 4;
   jobSeeker.isRegistrationComplete = true;
-  jobSeeker.status = "Pending";
+  jobSeeker.status = "Active";
 
   await jobSeeker.save();
 

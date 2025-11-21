@@ -46,12 +46,19 @@ const coinRuleSchema = new Schema(
       required: true,
       unique: true,
     },
+    // For job seekers
     coinCostPerApplication: {
       type: Number,
       default: 0,
       min: 0,
     },
     coinPerEmployeeCount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    // For recruiters
+    coinCostPerJobPost: {
       type: Number,
       default: 0,
       min: 0,

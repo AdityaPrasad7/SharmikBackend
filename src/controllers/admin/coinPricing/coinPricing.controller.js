@@ -19,6 +19,7 @@ const toDTO = (coinPackage) => ({
 const mapRule = (rule) => ({
   coinCostPerApplication: rule?.coinCostPerApplication ?? 0,
   coinPerEmployeeCount: rule?.coinPerEmployeeCount ?? 0,
+  coinCostPerJobPost: rule?.coinCostPerJobPost ?? 0,
 });
 
 const buildRuleUpdate = (body = {}) => {
@@ -28,6 +29,9 @@ const buildRuleUpdate = (body = {}) => {
   }
   if (body.coinPerEmployeeCount !== undefined) {
     update.coinPerEmployeeCount = body.coinPerEmployeeCount;
+  }
+  if (body.coinCostPerJobPost !== undefined) {
+    update.coinCostPerJobPost = body.coinCostPerJobPost;
   }
   return update;
 };

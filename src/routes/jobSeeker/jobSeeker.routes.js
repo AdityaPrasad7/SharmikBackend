@@ -20,6 +20,7 @@ import {
   getMyApplications,
   withdrawApplication,
 } from "../../controllers/jobSeeker/application.controller.js";
+import coinRoutes from "./coin.routes.js";
 import { validateRequest } from "../../middlewares/jobSeeker/validateJobSeeker.js";
 import { verifyJobSeekerJWT } from "../../middlewares/jobSeeker/authJobSeeker.js";
 import {
@@ -151,6 +152,9 @@ router.patch(
   verifyJobSeekerJWT,
   withdrawApplication
 );
+
+// Coin Routes
+router.use("/coins", coinRoutes);
 
 // Get Job Seeker by Phone - Must be last to avoid route conflicts
 router.get("/phone/:phone", getJobSeekerByPhone);

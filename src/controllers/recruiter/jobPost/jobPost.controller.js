@@ -6,6 +6,8 @@ import { RecruiterJob } from "../../../models/recruiter/jobPost/jobPost.model.js
 import { City } from "../../../models/location/city.model.js";
 import { Recruiter } from "../../../models/recruiter/recruiter.model.js";
 import { Specialization } from "../../../models/admin/specialization/specialization.model.js";
+import { CoinRule } from "../../../models/admin/coinPricing/coinPricing.model.js";
+import { deductCoins, checkCoinBalance } from "../../../services/coin/coinService.js";
 
 const normalizeArray = (value) => {
   if (!value) return [];
@@ -117,6 +119,8 @@ export const createRecruiterJob = asyncHandler(async (req, res) => {
     benefits = {},
     experienceMinYears = 0,
     experienceMaxYears,
+    preferredAgeMin,
+    preferredAgeMax,
     qualifications = [],
     responsibilities = [],
     aboutCompany = {},
@@ -156,6 +160,27 @@ export const createRecruiterJob = asyncHandler(async (req, res) => {
     normalizedSkills.push(...trimmedSkills);
   }
 
+  // Fetch coin cost for job posting
+  const coinRule = await CoinRule.findOne({ category: "recruiter" });
+  const coinCostPerJobPost = coinRule?.coinCostPerJobPost || 0;
+
+  // Check coin balance if coin cost is set
+  if (coinCostPerJobPost > 0) {
+    const balanceCheck = await checkCoinBalance(
+      recruiter._id,
+      "recruiter",
+      coinCostPerJobPost
+    );
+
+    if (!balanceCheck.hasSufficientBalance) {
+      throw new ApiError(
+        400,
+        `Insufficient coin balance. Required: ${coinCostPerJobPost} coins, Available: ${balanceCheck.currentBalance} coins. Please purchase more coins.`
+      );
+    }
+  }
+
+  // Create job
   const job = await RecruiterJob.create({
     recruiter: recruiter._id,
     jobTitle,
@@ -184,10 +209,38 @@ export const createRecruiterJob = asyncHandler(async (req, res) => {
       minYears: experienceMinYears,
       maxYears: experienceMaxYears ?? null,
     },
+    preferredAgeRange: preferredAgeMin || preferredAgeMax
+      ? {
+          minAge: preferredAgeMin ?? null,
+          maxAge: preferredAgeMax ?? null,
+        }
+      : {},
     qualifications: normalizedQualifications,
     responsibilities: normalizedResponsibilities,
     companySnapshot: buildCompanySnapshot(recruiter, aboutCompany),
   });
+
+  // Deduct coins after successful job creation
+  let coinTransaction = null;
+  let balanceAfter = null;
+  if (coinCostPerJobPost > 0) {
+    try {
+      const deductionResult = await deductCoins(
+        recruiter._id,
+        "recruiter",
+        coinCostPerJobPost,
+        `Job Post Creation: ${jobTitle}`,
+        job._id,
+        "job"
+      );
+      coinTransaction = deductionResult.transaction;
+      balanceAfter = deductionResult.balanceAfter;
+    } catch (error) {
+      // If coin deduction fails, delete the job and throw error
+      await RecruiterJob.findByIdAndDelete(job._id);
+      throw error;
+    }
+  }
 
   const responsePayload = {
     job: {
@@ -209,6 +262,13 @@ export const createRecruiterJob = asyncHandler(async (req, res) => {
           : `${experienceMinYears}+ YoE`,
       ],
     },
+    coinTransaction: coinTransaction
+      ? {
+          amount: coinCostPerJobPost,
+          balanceAfter,
+          description: coinTransaction.description,
+        }
+      : null,
   };
 
   return res
@@ -569,6 +629,14 @@ export const getAllJobPosts = asyncHandler(async (req, res) => {
       ? `${job.experienceRange.minYears}-${job.experienceRange.maxYears} YoE`
       : `${job.experienceRange.minYears}+ YoE`;
 
+    const preferredAgeLabel = job.preferredAgeRange
+      ? job.preferredAgeRange.maxAge
+        ? `${job.preferredAgeRange.minAge}-${job.preferredAgeRange.maxAge} years`
+        : job.preferredAgeRange.minAge
+          ? `${job.preferredAgeRange.minAge}+ years`
+          : null
+      : null;
+
     return {
       _id: job._id,
       jobTitle: job.jobTitle,
@@ -585,6 +653,8 @@ export const getAllJobPosts = asyncHandler(async (req, res) => {
       benefits: job.benefits,
       experienceRange: job.experienceRange,
       experienceLabel,
+      preferredAgeRange: job.preferredAgeRange || null,
+      preferredAgeLabel,
       qualifications: job.qualifications,
       responsibilities: job.responsibilities,
       companySnapshot: job.companySnapshot,
@@ -596,6 +666,7 @@ export const getAllJobPosts = asyncHandler(async (req, res) => {
       summary: {
         salaryLabel,
         experienceLabel,
+        preferredAgeLabel,
         jobTags: [
           job.jobType,
           job.employmentMode,
@@ -675,6 +746,15 @@ export const getJobPostById = asyncHandler(async (req, res) => {
     ? `${job.experienceRange.minYears}-${job.experienceRange.maxYears} YoE`
     : `${job.experienceRange.minYears}+ YoE`;
 
+  // Format preferred age label
+  const preferredAgeLabel = job.preferredAgeRange
+    ? job.preferredAgeRange.maxAge
+      ? `${job.preferredAgeRange.minAge}-${job.preferredAgeRange.maxAge} years`
+      : job.preferredAgeRange.minAge
+        ? `${job.preferredAgeRange.minAge}+ years`
+        : null
+    : null;
+
   // Format response with all job details
   const formattedJob = {
     _id: job._id,
@@ -692,6 +772,8 @@ export const getJobPostById = asyncHandler(async (req, res) => {
     benefits: job.benefits,
     experienceRange: job.experienceRange,
     experienceLabel,
+    preferredAgeRange: job.preferredAgeRange || null,
+    preferredAgeLabel,
     qualifications: job.qualifications,
     responsibilities: job.responsibilities,
     aboutCompany: job.aboutCompany,

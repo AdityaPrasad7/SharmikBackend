@@ -98,6 +98,29 @@ export const createRecruiterJobSchema = Joi.object({
     .messages({
       "number.min": "Experience max must be greater than or equal to experience min",
     }),
+  preferredAgeMin: Joi.number()
+    .integer()
+    .min(18)
+    .max(100)
+    .optional()
+    .messages({
+      "number.base": "Preferred age min must be a number",
+      "number.integer": "Preferred age min must be an integer",
+      "number.min": "Preferred age min must be at least 18",
+      "number.max": "Preferred age min must be at most 100",
+    }),
+  preferredAgeMax: Joi.number()
+    .integer()
+    .min(18)
+    .max(100)
+    .min(Joi.ref("preferredAgeMin"))
+    .optional()
+    .messages({
+      "number.base": "Preferred age max must be a number",
+      "number.integer": "Preferred age max must be an integer",
+      "number.min": "Preferred age max must be greater than or equal to preferred age min",
+      "number.max": "Preferred age max must be at most 100",
+    }),
   qualifications: Joi.alternatives().try(stringArray.min(1), Joi.string().trim()),
   responsibilities: Joi.alternatives().try(stringArray, Joi.string().trim()),
   aboutCompany: aboutCompanySchema,

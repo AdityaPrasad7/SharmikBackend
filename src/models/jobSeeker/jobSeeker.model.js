@@ -143,7 +143,14 @@ const jobSeekerSchema = new Schema(
     status: {
       type: String,
       enum: ["Pending", "Active", "Inactive", "Rejected"],
-      default: "Pending",
+      default: "Active",
+    },
+
+    // Coin Balance
+    coinBalance: {
+      type: Number,
+      default: 0,
+      min: 0,
     },
 
     // Authentication

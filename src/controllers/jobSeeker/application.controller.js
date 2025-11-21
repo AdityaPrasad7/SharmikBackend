@@ -5,6 +5,8 @@ import mongoose from "mongoose";
 import { Application } from "../../models/jobSeeker/application.model.js";
 import { RecruiterJob } from "../../models/recruiter/jobPost/jobPost.model.js";
 import { JobSeeker } from "../../models/jobSeeker/jobSeeker.model.js";
+import { CoinRule } from "../../models/admin/coinPricing/coinPricing.model.js";
+import { deductCoins, checkCoinBalance } from "../../services/coin/coinService.js";
 
 /**
  * Apply for a Job (Job Seeker)
@@ -37,6 +39,28 @@ export const applyForJob = asyncHandler(async (req, res) => {
   // Check if job seeker has completed registration
   if (!jobSeeker.isRegistrationComplete) {
     throw new ApiError(400, "Please complete your registration before applying for jobs");
+  }
+
+  // Fetch coin cost for job application
+  const coinRule = await CoinRule.findOne({ category: "jobSeeker" });
+  const coinCostPerApplication = coinRule?.coinCostPerApplication || 0;
+
+  // Check coin balance if coin cost is set (only for new applications)
+  let coinTransaction = null;
+  let balanceAfter = null;
+  if (coinCostPerApplication > 0) {
+    const balanceCheck = await checkCoinBalance(
+      jobSeeker._id,
+      "job-seeker",
+      coinCostPerApplication
+    );
+
+    if (!balanceCheck.hasSufficientBalance) {
+      throw new ApiError(
+        400,
+        `Insufficient coin balance. Required: ${coinCostPerApplication} coins, Available: ${balanceCheck.currentBalance} coins. Please purchase more coins.`
+      );
+    }
   }
 
   // Check if already applied
@@ -75,9 +99,14 @@ export const applyForJob = asyncHandler(async (req, res) => {
         }
       }
 
+      // Note: No coin deduction for re-applying to previously withdrawn applications
+
       return res.status(200).json(
         ApiResponse.success(
-          { application: existingApplication },
+          {
+            application: existingApplication,
+            coinTransaction: null, // No coin deduction for re-application
+          },
           "Application submitted successfully"
         )
       );
@@ -95,6 +124,26 @@ export const applyForJob = asyncHandler(async (req, res) => {
     notes: notes?.trim() || "",
     status: "Applied",
   });
+
+  // Deduct coins after successful application creation
+  if (coinCostPerApplication > 0) {
+    try {
+      const deductionResult = await deductCoins(
+        jobSeeker._id,
+        "job-seeker",
+        coinCostPerApplication,
+        `Job Application: ${job.jobTitle}`,
+        application._id,
+        "application"
+      );
+      coinTransaction = deductionResult.transaction;
+      balanceAfter = deductionResult.balanceAfter;
+    } catch (error) {
+      // If coin deduction fails, delete the application and throw error
+      await Application.findByIdAndDelete(application._id);
+      throw error;
+    }
+  }
 
   // Increment application count on job and check if vacancy is filled
   const updatedJob = await RecruiterJob.findByIdAndUpdate(
@@ -127,7 +176,16 @@ export const applyForJob = asyncHandler(async (req, res) => {
 
   return res.status(201).json(
     ApiResponse.success(
-      { application },
+      {
+        application,
+        coinTransaction: coinTransaction
+          ? {
+              amount: coinCostPerApplication,
+              balanceAfter,
+              description: coinTransaction.description,
+            }
+          : null,
+      },
       "Application submitted successfully"
     )
   );
