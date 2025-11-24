@@ -86,7 +86,7 @@ export const applyForJob = asyncHandler(async (req, res) => {
       const updatedJob = await RecruiterJob.findByIdAndUpdate(
         jobId,
         {
-          $inc: { applicationCount: 1 },
+        $inc: { applicationCount: 1 },
         },
         { new: true }
       );
@@ -149,7 +149,7 @@ export const applyForJob = asyncHandler(async (req, res) => {
   const updatedJob = await RecruiterJob.findByIdAndUpdate(
     jobId,
     {
-      $inc: { applicationCount: 1 },
+    $inc: { applicationCount: 1 },
     },
     { new: true }
   );

@@ -3,6 +3,7 @@ import {
   getBalance,
   getTransactions,
   getCoinPackages,
+  getCoinPackageById,
   purchaseCoins,
   verifyPayment,
 } from "../../controllers/recruiter/coin.controller.js";
@@ -21,6 +22,9 @@ router.get("/transactions", getTransactions);
 
 // Get available coin packages
 router.get("/packages", getCoinPackages);
+
+// Get a single coin package by ID
+router.get("/packages/:packageId", getCoinPackageById);
 
 // Purchase coins (MOCK)
 router.post("/purchase", purchaseCoins);

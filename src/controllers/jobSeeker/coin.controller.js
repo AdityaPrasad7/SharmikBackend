@@ -92,6 +92,46 @@ export const getCoinPackages = asyncHandler(async (req, res) => {
 });
 
 /**
+ * Get a single coin package by ID
+ */
+export const getCoinPackageById = asyncHandler(async (req, res) => {
+  const { packageId } = req.params;
+
+  if (!packageId) {
+    throw new ApiError(400, "Package ID is required");
+  }
+
+  const coinPackage = await CoinPackage.findOne({
+    _id: packageId,
+    category: "jobSeeker",
+    isVisible: true,
+  }).lean();
+
+  if (!coinPackage) {
+    throw new ApiError(404, "Coin package not found or not available");
+  }
+
+  const formattedPackage = {
+    id: coinPackage._id.toString(),
+    name: coinPackage.name,
+    coins: coinPackage.coins,
+    price: {
+      amount: coinPackage.price.amount,
+      currency: coinPackage.price.currency,
+    },
+  };
+
+  return res.status(200).json(
+    ApiResponse.success(
+      {
+        package: formattedPackage,
+      },
+      "Coin package retrieved successfully"
+    )
+  );
+});
+
+/**
  * Initiate coin purchase (MOCK - for now)
  * In future, this will create Razorpay order
  */

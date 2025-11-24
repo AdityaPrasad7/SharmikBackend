@@ -51,7 +51,7 @@ export const validateRequest = (schema, property = "body") =>
             } else {
               throw new ApiError(400, "Invalid selectedSkills format. Must be a valid JSON array.");
             }
-          } catch (error) {
+        } catch (error) {
             // If JSON parsing fails, check if it's a comma-separated string
             if (error instanceof SyntaxError) {
               const trimmed = data.selectedSkills.trim();
@@ -63,7 +63,7 @@ export const validateRequest = (schema, property = "body") =>
                 data.selectedSkills = trimmed.length > 0 ? [trimmed] : [];
               }
             } else {
-              throw new ApiError(400, "Invalid selectedSkills format. Must be a valid JSON array.");
+          throw new ApiError(400, "Invalid selectedSkills format. Must be a valid JSON array.");
             }
           }
         } else {
