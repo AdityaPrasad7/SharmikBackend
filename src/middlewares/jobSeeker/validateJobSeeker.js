@@ -32,12 +32,43 @@ export const validateRequest = (schema, property = "body") =>
 
     // Parse JSON strings from form-data before validation
     if (property === "body" && data) {
-      // Parse selectedSkills if it's a JSON string
-      if (data.selectedSkills && typeof data.selectedSkills === "string") {
-        try {
-          data.selectedSkills = JSON.parse(data.selectedSkills);
-        } catch (error) {
-          throw new ApiError(400, "Invalid selectedSkills format. Must be a valid JSON array.");
+      // Parse selectedSkills if it's a JSON string or handle array format
+      if (data.selectedSkills !== undefined && data.selectedSkills !== null) {
+        // If it's already an array, keep it as is
+        if (Array.isArray(data.selectedSkills)) {
+          // Ensure all items are strings and trim them
+          data.selectedSkills = data.selectedSkills.map(skill => 
+            typeof skill === 'string' ? skill.trim() : String(skill).trim()
+          ).filter(skill => skill.length > 0);
+        } else if (typeof data.selectedSkills === "string") {
+          // Try to parse as JSON array
+          try {
+            const parsed = JSON.parse(data.selectedSkills);
+            if (Array.isArray(parsed)) {
+              data.selectedSkills = parsed.map(skill => 
+                typeof skill === 'string' ? skill.trim() : String(skill).trim()
+              ).filter(skill => skill.length > 0);
+            } else {
+              throw new ApiError(400, "Invalid selectedSkills format. Must be a valid JSON array.");
+            }
+          } catch (error) {
+            // If JSON parsing fails, check if it's a comma-separated string
+            if (error instanceof SyntaxError) {
+              const trimmed = data.selectedSkills.trim();
+              // Check if it looks like a comma-separated list
+              if (trimmed.includes(',')) {
+                data.selectedSkills = trimmed.split(',').map(skill => skill.trim()).filter(skill => skill.length > 0);
+              } else {
+                // Single value, convert to array
+                data.selectedSkills = trimmed.length > 0 ? [trimmed] : [];
+              }
+            } else {
+              throw new ApiError(400, "Invalid selectedSkills format. Must be a valid JSON array.");
+            }
+          }
+        } else {
+          // Not an array or string, convert to array
+          data.selectedSkills = [String(data.selectedSkills).trim()].filter(skill => skill.length > 0);
         }
       }
       
