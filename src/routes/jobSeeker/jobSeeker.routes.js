@@ -13,6 +13,7 @@ import {
   getJobSeekerByPhone,
   refreshAccessToken,
   logoutJobSeeker,
+  getJobSeekerProfile,
 } from "../../controllers/jobSeeker/jobSeeker.controller.js";
 import { getSuggestedJobs } from "../../controllers/jobSeeker/suggestedJobs.controller.js";
 import {
@@ -155,6 +156,9 @@ router.patch(
 
 // Coin Routes
 router.use("/coins", coinRoutes);
+
+// Profile Route - Requires authentication
+router.get("/profile", verifyJobSeekerJWT, getJobSeekerProfile);
 
 // Get Job Seeker by Phone - Must be last to avoid route conflicts
 router.get("/phone/:phone", getJobSeekerByPhone);

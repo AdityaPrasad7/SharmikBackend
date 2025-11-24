@@ -323,3 +323,56 @@ export const logoutRecruiter = asyncHandler(async (req, res) => {
     .json(ApiResponse.success(null, "Logout successful"));
 });
 
+/**
+ * Get Recruiter Profile
+ * Returns the authenticated recruiter's complete profile information
+ * 
+ * @route GET /api/recruiters/profile
+ * @requires Authentication (JWT token)
+ */
+export const getRecruiterProfile = asyncHandler(async (req, res) => {
+  const recruiter = req.recruiter; // From auth middleware
+
+  // Fetch full recruiter profile
+  const profile = await Recruiter.findById(recruiter._id).lean();
+
+  if (!profile) {
+    throw new ApiError(404, "Recruiter profile not found");
+  }
+
+  // Format response
+  const formattedProfile = {
+    _id: profile._id,
+    phone: profile.phone,
+    phoneVerified: profile.phoneVerified,
+    companyName: profile.companyName,
+    email: profile.email,
+    // Location
+    state: profile.state,
+    city: profile.city,
+    // Documents
+    profilePhoto: profile.profilePhoto,
+    companyLogo: profile.companyLogo,
+    documents: profile.documents || [],
+    // Registration Status
+    registrationStep: profile.registrationStep,
+    isRegistrationComplete: profile.isRegistrationComplete,
+    // Status
+    status: profile.status,
+    // Coin Balance
+    coinBalance: profile.coinBalance || 0,
+    // Role
+    role: profile.role,
+    // Timestamps
+    createdAt: profile.createdAt,
+    updatedAt: profile.updatedAt,
+  };
+
+  return res.status(200).json(
+    ApiResponse.success(
+      { profile: formattedProfile },
+      "Recruiter profile retrieved successfully"
+    )
+  );
+});
+

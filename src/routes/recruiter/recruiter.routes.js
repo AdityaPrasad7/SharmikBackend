@@ -6,6 +6,7 @@ import {
   getRecruiterByPhone,
   refreshRecruiterAccessToken,
   logoutRecruiter,
+  getRecruiterProfile,
 } from "../../controllers/recruiter/recruiter.controller.js";
 import {
   getJobCategories,
@@ -23,6 +24,7 @@ import jobPostRoutes from "../jobPost/jobPost.routes.js";
 import dashboardRoutes from "./dashboard/dashboard.routes.js";
 import applicationRoutes from "./application/application.routes.js";
 import coinRoutes from "./coin.routes.js";
+import { verifyRecruiterJWT } from "../../middlewares/recruiter/authRecruiter.js";
 import {
   uploadFields,
   uploadToCloudinaryMiddleware,
@@ -80,7 +82,10 @@ router.get("/job-meta", getJobMeta);
 // Job Posting Routes
 router.use("/", jobPostRoutes);
 
-// Get Recruiter by Phone
+// Profile Route - Requires authentication
+router.get("/profile", verifyRecruiterJWT, getRecruiterProfile);
+
+// Get Recruiter by Phone - Must be last to avoid route conflicts
 router.get("/:phone", getRecruiterByPhone);
 
 export default router;

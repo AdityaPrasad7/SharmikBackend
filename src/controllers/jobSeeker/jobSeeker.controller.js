@@ -980,3 +980,80 @@ export const logoutJobSeeker = asyncHandler(async (req, res) => {
     );
 });
 
+/**
+ * Get Job Seeker Profile
+ * Returns the authenticated job seeker's complete profile information
+ * 
+ * @route GET /api/job-seekers/profile
+ * @requires Authentication (JWT token)
+ */
+export const getJobSeekerProfile = asyncHandler(async (req, res) => {
+  const jobSeeker = req.jobSeeker; // From auth middleware
+
+  // Populate specialization if exists
+  const profile = await JobSeeker.findById(jobSeeker._id)
+    .populate("specializationId", "name description skills status")
+    .lean();
+
+  if (!profile) {
+    throw new ApiError(404, "Job seeker profile not found");
+  }
+
+  // Format response
+  const formattedProfile = {
+    _id: profile._id,
+    phone: profile.phone,
+    phoneVerified: profile.phoneVerified,
+    category: profile.category,
+    role: profile.role,
+    // Personal Information
+    name: profile.name,
+    email: profile.email,
+    gender: profile.gender,
+    dateOfBirth: profile.dateOfBirth,
+    // Location
+    state: profile.state,
+    city: profile.city,
+    // Skills & Specialization
+    specializationId: profile.specializationId?._id || null,
+    specialization: profile.specializationId
+      ? {
+          _id: profile.specializationId._id,
+          name: profile.specializationId.name,
+          description: profile.specializationId.description,
+        }
+      : null,
+    skills: profile.skills || [],
+    selectedSkills: profile.selectedSkills || [],
+    // Question Answers
+    questionAnswers: profile.questionAnswers || [],
+    // Documents
+    aadhaarCard: profile.aadhaarCard,
+    profilePhoto: profile.profilePhoto,
+    resume: profile.resume,
+    experienceCertificate: profile.experienceCertificate,
+    documents: profile.documents || [],
+    // Education Details
+    education: profile.education || null,
+    // Experience Status
+    experienceStatus: profile.experienceStatus,
+    // Registration Status
+    registrationStep: profile.registrationStep,
+    isRegistrationComplete: profile.isRegistrationComplete,
+    // Status
+    status: profile.status,
+    // Coin Balance
+    coinBalance: profile.coinBalance || 0,
+    // Timestamps
+    createdAt: profile.createdAt,
+    updatedAt: profile.updatedAt,
+  };
+
+  return res.status(200).json(
+    ApiResponse.success(
+      { profile: formattedProfile },
+      "Job seeker profile retrieved successfully"
+    )
+  );
+});
+
