@@ -736,6 +736,10 @@ export const getJobPostById = asyncHandler(async (req, res) => {
     throw new ApiError(404, "Job not found");
   }
 
+  // Fetch coin cost for job application
+  const coinRule = await CoinRule.findOne({ category: "jobSeeker" });
+  const coinCostPerApplication = coinRule?.coinCostPerApplication || 0;
+
   // Format salary label
   const salaryLabel = `₹${Math.round(job.expectedSalary.min).toLocaleString("en-IN")} - ₹${Math.round(
     job.expectedSalary.max
@@ -781,6 +785,7 @@ export const getJobPostById = asyncHandler(async (req, res) => {
     recruiter: job.recruiter,
     status: job.status,
     applicationCount: job.applicationCount,
+    coinCostPerApplication,
     createdAt: job.createdAt,
     updatedAt: job.updatedAt,
     summary: {
