@@ -607,6 +607,10 @@ export const getAllJobPosts = asyncHandler(async (req, res) => {
     sortOptions[sortBy] = sortOrder === "asc" ? 1 : -1;
   }
 
+  // Fetch coin cost for job application
+  const coinRule = await CoinRule.findOne({ category: "jobSeeker" });
+  const coinCostPerApplication = coinRule?.coinCostPerApplication || 0;
+
   // Fetch jobs with pagination
   const jobs = await RecruiterJob.find(filter)
     .populate("recruiter", "companyName companyLogo city state email phone")
@@ -661,6 +665,7 @@ export const getAllJobPosts = asyncHandler(async (req, res) => {
       recruiter: job.recruiter,
       status: job.status,
       applicationCount: job.applicationCount,
+      coinCostPerApplication,
       createdAt: job.createdAt,
       updatedAt: job.updatedAt,
       summary: {

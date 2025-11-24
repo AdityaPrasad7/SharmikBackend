@@ -210,6 +210,10 @@ export const getMyApplications = asyncHandler(async (req, res) => {
   const limitNumber = Math.min(100, Math.max(1, parseInt(limit)));
   const skip = (pageNumber - 1) * limitNumber;
 
+  // Fetch coin cost for job application
+  const coinRule = await CoinRule.findOne({ category: "jobSeeker" });
+  const coinCostPerApplication = coinRule?.coinCostPerApplication || 0;
+
   // Fetch applications with pagination
   const applications = await Application.find(filter)
     .populate({
@@ -225,6 +229,12 @@ export const getMyApplications = asyncHandler(async (req, res) => {
     .limit(limitNumber)
     .lean();
 
+  // Add coin cost to each application
+  const applicationsWithCoinCost = applications.map((application) => ({
+    ...application,
+    coinCostPerApplication,
+  }));
+
   // Get total count
   const totalApplications = await Application.countDocuments(filter);
   const totalPages = Math.ceil(totalApplications / limitNumber);
@@ -232,7 +242,7 @@ export const getMyApplications = asyncHandler(async (req, res) => {
   return res.status(200).json(
     ApiResponse.success(
       {
-        applications,
+        applications: applicationsWithCoinCost,
         pagination: {
           currentPage: pageNumber,
           totalPages,
