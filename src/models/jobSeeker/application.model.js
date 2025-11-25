@@ -18,7 +18,7 @@ const applicationSchema = new Schema(
     },
     status: {
       type: String,
-      enum: ["Applied", "Shortlisted", "Rejected", "Withdrawn"],
+      enum: ["Applied", "Pending", "Shortlisted", "Rejected", "Withdrawn"],
       default: "Applied",
       index: true,
     },

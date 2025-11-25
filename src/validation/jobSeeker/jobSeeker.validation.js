@@ -268,10 +268,10 @@ export const applyForJobSchema = Joi.object({
 
 export const getMyApplicationsSchema = Joi.object({
   status: Joi.string()
-    .valid("Applied", "Shortlisted", "Rejected", "Withdrawn")
+    .valid("Applied", "Pending", "Shortlisted", "Accepted", "Rejected", "Withdrawn")
     .optional()
     .messages({
-      "any.only": "Status must be one of: Applied, Shortlisted, Rejected, Withdrawn",
+      "any.only": "Status must be one of: Applied, Pending, Shortlisted, Accepted, Rejected, Withdrawn",
     }),
   page: Joi.number().integer().min(1).optional(),
   limit: Joi.number().integer().min(1).max(100).optional(),

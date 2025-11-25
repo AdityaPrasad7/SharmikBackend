@@ -72,7 +72,7 @@ export const applyForJob = asyncHandler(async (req, res) => {
   if (existingApplication) {
     if (existingApplication.status === "Withdrawn") {
       // Allow re-applying if previously withdrawn
-      existingApplication.status = "Applied";
+      existingApplication.status = "Pending"; // Set to Pending - waiting for recruiter action
       // Update coverLetter and notes only if provided
       if (coverLetter !== undefined) {
         existingApplication.coverLetter = coverLetter?.trim() || "";
@@ -122,7 +122,7 @@ export const applyForJob = asyncHandler(async (req, res) => {
     jobSeeker: jobSeeker._id,
     coverLetter: coverLetter?.trim() || "",
     notes: notes?.trim() || "",
-    status: "Applied",
+    status: "Pending", // Start as "Pending" - waiting for recruiter action
   });
 
   // Deduct coins after successful application creation
@@ -202,7 +202,12 @@ export const getMyApplications = asyncHandler(async (req, res) => {
   // Build filter
   const filter = { jobSeeker: jobSeeker._id };
   if (status) {
-    filter.status = status;
+    // Map "Accepted" (job seeker view) to "Shortlisted" (database status)
+    if (status === "Accepted") {
+      filter.status = "Shortlisted";
+    } else {
+      filter.status = status;
+    }
   }
 
   // Pagination
@@ -229,11 +234,70 @@ export const getMyApplications = asyncHandler(async (req, res) => {
     .limit(limitNumber)
     .lean();
 
-  // Add coin cost to each application
-  const applicationsWithCoinCost = applications.map((application) => ({
-    ...application,
-    coinCostPerApplication,
-  }));
+  // Map status for job seeker view and add coin cost
+  const applicationsWithCoinCost = applications.map((application) => {
+    // Map "Shortlisted" to "Accepted" for job seeker view
+    // Keep "Applied" and "Pending" as separate statuses
+    let displayStatus = application.status;
+    if (application.status === "Shortlisted") {
+      displayStatus = "Accepted";
+    }
+    // Keep "Applied" and "Pending" as is - both are valid statuses
+    
+    // Determine progress steps for UI progress tracker
+    // Applied: always true once application is created
+    // Pending: true if status is Applied, Pending, or beyond
+    // Accepted: true if status is Shortlisted/Accepted
+    // Rejected: true if status is Rejected
+    const progressSteps = {
+      applied: true, // Always true - application was submitted
+      pending: application.status === "Applied" || application.status === "Pending" || application.status === "Shortlisted" || application.status === "Rejected" || application.status === "Withdrawn",
+      accepted: application.status === "Shortlisted",
+      rejected: application.status === "Rejected",
+    };
+    
+    // Format recruiter info (handle null cases)
+    const recruiterInfo = application.job?.recruiter 
+      ? {
+          _id: application.job.recruiter._id,
+          companyName: application.job.recruiter.companyName || application.job.companySnapshot?.name || "Company",
+          companyLogo: application.job.recruiter.companyLogo || application.job.companySnapshot?.logo || "",
+          city: application.job.recruiter.city || application.job.city || "",
+          state: application.job.recruiter.state || "",
+        }
+      : {
+          companyName: application.job?.companySnapshot?.name || "Company",
+          companyLogo: application.job?.companySnapshot?.logo || "",
+          city: application.job?.city || "",
+          state: "",
+        };
+    
+    return {
+      _id: application._id,
+      status: displayStatus,
+      progressSteps, // Progress tracker information for UI
+      coverLetter: application.coverLetter || "",
+      notes: application.notes || "",
+      coinCostPerApplication,
+      createdAt: application.createdAt,
+      updatedAt: application.updatedAt,
+      job: {
+        _id: application.job._id,
+        jobTitle: application.job.jobTitle,
+        jobDescription: application.job.jobDescription,
+        city: application.job.city,
+        expectedSalary: application.job.expectedSalary,
+        jobType: application.job.jobType,
+        employmentMode: application.job.employmentMode,
+        categories: application.job.categories || [],
+        tags: application.job.tags || [],
+        status: application.job.status,
+        applicationCount: application.job.applicationCount,
+        companySnapshot: application.job.companySnapshot || {},
+        recruiter: recruiterInfo,
+      },
+    };
+  });
 
   // Get total count
   const totalApplications = await Application.countDocuments(filter);
