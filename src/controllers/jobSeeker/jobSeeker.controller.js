@@ -206,15 +206,29 @@ export const registerNonDegree = asyncHandler(async (req, res) => {
     throw new ApiError(404, "Specialization not found");
   }
 
-  // Verify skills belong to specialization
+  // Verify skills belong to specialization (case-insensitive, whitespace-insensitive)
   const specializationSkills = specialization.skills || [];
-  const invalidSkills = selectedSkills.filter(
-    (skill) => !specializationSkills.includes(skill)
+  
+  // Normalize specialization skills for comparison (trim and lowercase)
+  const normalizedSpecializationSkills = specializationSkills.map(skill => 
+    String(skill).trim().toLowerCase()
   );
+  
+  // Check each selected skill against specialization skills
+  const invalidSkills = selectedSkills.filter((skill) => {
+    const normalizedSkill = String(skill).trim().toLowerCase();
+    return !normalizedSpecializationSkills.includes(normalizedSkill);
+  });
+  
   if (invalidSkills.length > 0) {
+    // Debug: Log available skills for troubleshooting
+    console.log("Available skills in specialization:", specializationSkills);
+    console.log("Selected skills:", selectedSkills);
+    console.log("Invalid skills:", invalidSkills);
+    
     throw new ApiError(
       400,
-      `Invalid skills: ${invalidSkills.join(", ")}. Skills must belong to the selected specialization.`
+      `Invalid skills: ${invalidSkills.join(", ")}. Skills must belong to the selected specialization. Available skills: ${specializationSkills.join(", ")}`
     );
   }
 
@@ -383,15 +397,29 @@ export const step2Registration = asyncHandler(async (req, res) => {
     throw new ApiError(404, "Specialization not found");
   }
 
-  // Verify skills belong to specialization
+  // Verify skills belong to specialization (case-insensitive, whitespace-insensitive)
   const specializationSkills = specialization.skills || [];
-  const invalidSkills = selectedSkills.filter(
-    (skill) => !specializationSkills.includes(skill)
+  
+  // Normalize specialization skills for comparison (trim and lowercase)
+  const normalizedSpecializationSkills = specializationSkills.map(skill => 
+    String(skill).trim().toLowerCase()
   );
+  
+  // Check each selected skill against specialization skills
+  const invalidSkills = selectedSkills.filter((skill) => {
+    const normalizedSkill = String(skill).trim().toLowerCase();
+    return !normalizedSpecializationSkills.includes(normalizedSkill);
+  });
+  
   if (invalidSkills.length > 0) {
+    // Debug: Log available skills for troubleshooting
+    console.log("Available skills in specialization:", specializationSkills);
+    console.log("Selected skills:", selectedSkills);
+    console.log("Invalid skills:", invalidSkills);
+    
     throw new ApiError(
       400,
-      `Invalid skills: ${invalidSkills.join(", ")}. Skills must belong to the selected specialization.`
+      `Invalid skills: ${invalidSkills.join(", ")}. Skills must belong to the selected specialization. Available skills: ${specializationSkills.join(", ")}`
     );
   }
 
