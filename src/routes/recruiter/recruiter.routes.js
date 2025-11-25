@@ -7,6 +7,7 @@ import {
   refreshRecruiterAccessToken,
   logoutRecruiter,
   getRecruiterProfile,
+  updateRecruiterProfile,
 } from "../../controllers/recruiter/recruiter.controller.js";
 import {
   getJobCategories,
@@ -19,6 +20,7 @@ import {
   sendOTPSchema,
   verifyOTPSchema,
   recruiterRegistrationSchema,
+  updateRecruiterProfileSchema,
 } from "../../validation/recruiter/recruiter.validation.js";
 import jobPostRoutes from "../jobPost/jobPost.routes.js";
 import dashboardRoutes from "./dashboard/dashboard.routes.js";
@@ -82,8 +84,19 @@ router.get("/job-meta", getJobMeta);
 // Job Posting Routes
 router.use("/", jobPostRoutes);
 
-// Profile Route - Requires authentication
+// Profile Routes - Requires authentication
 router.get("/profile", verifyRecruiterJWT, getRecruiterProfile);
+router.put(
+  "/profile",
+  verifyRecruiterJWT,
+  uploadFields([
+    { name: "companyLogo", maxCount: 1 },
+    { name: "documents", maxCount: 5 },
+  ]),
+  uploadToCloudinaryMiddleware,
+  validateRequest(updateRecruiterProfileSchema),
+  updateRecruiterProfile
+);
 
 // Get Recruiter by Phone - Must be last to avoid route conflicts
 router.get("/:phone", getRecruiterByPhone);

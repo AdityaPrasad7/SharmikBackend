@@ -47,4 +47,17 @@ export const recruiterRegistrationSchema = Joi.object({
   city: Joi.string().trim().min(1).optional(),
 }).or("phone", "recruiterId");
 
+// Update Recruiter Profile Schema
+export const updateRecruiterProfileSchema = Joi.object({
+  companyName: Joi.string().trim().min(1).optional().messages({
+    "string.min": "Company name must be at least 1 character",
+  }),
+  email: Joi.string().email().trim().lowercase().optional().messages({
+    "string.email": "Please provide a valid email address",
+  }),
+  state: Joi.string().trim().min(1).optional(),
+  city: Joi.string().trim().min(1).optional(),
+  // Note: Documents (companyLogo, etc.) are handled via file upload middleware
+});
+
 

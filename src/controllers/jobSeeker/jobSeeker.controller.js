@@ -1085,3 +1085,184 @@ export const getJobSeekerProfile = asyncHandler(async (req, res) => {
   );
 });
 
+/**
+ * Update Job Seeker Profile
+ * Allows authenticated job seeker to update their profile information
+ * 
+ * @route PUT /api/job-seekers/profile
+ * @requires Authentication (JWT token)
+ */
+export const updateJobSeekerProfile = asyncHandler(async (req, res) => {
+  const jobSeeker = req.jobSeeker; // From auth middleware
+  const {
+    name,
+    email,
+    gender,
+    dateOfBirth,
+    state,
+    city,
+    stateId,
+    cityId,
+    specializationId,
+    selectedSkills,
+  } = req.body;
+
+  // Find the job seeker
+  const profile = await JobSeeker.findById(jobSeeker._id);
+  if (!profile) {
+    throw new ApiError(404, "Job seeker profile not found");
+  }
+
+  // Update personal information
+  if (name !== undefined) {
+    profile.name = name?.trim() || null;
+  }
+  if (email !== undefined) {
+    profile.email = email?.trim().toLowerCase() || null;
+  }
+  if (gender !== undefined) {
+    profile.gender = gender?.trim().toLowerCase() || null;
+  }
+  if (dateOfBirth !== undefined) {
+    profile.dateOfBirth = dateOfBirth ? new Date(dateOfBirth) : null;
+  }
+
+  // Update location (support both names and IDs)
+  if (stateId || cityId) {
+    if (stateId) {
+      const stateDoc = await State.findById(stateId);
+      if (!stateDoc) {
+        throw new ApiError(404, "State not found");
+      }
+      profile.state = stateDoc.name;
+    }
+    if (cityId) {
+      const cityDoc = await City.findById(cityId);
+      if (!cityDoc) {
+        throw new ApiError(404, "City not found");
+      }
+      profile.city = cityDoc.name;
+      
+      // Verify city belongs to state if both are provided
+      if (stateId && cityDoc.stateId.toString() !== stateId) {
+        throw new ApiError(400, "City does not belong to the selected state");
+      }
+    }
+  } else {
+    // Update using names directly
+    if (state !== undefined) {
+      profile.state = state?.trim() || null;
+    }
+    if (city !== undefined) {
+      profile.city = city?.trim() || null;
+    }
+  }
+
+  // Update specialization and skills
+  if (specializationId !== undefined) {
+    const specialization = await Specialization.findById(specializationId);
+    if (!specialization) {
+      throw new ApiError(404, "Specialization not found");
+    }
+    profile.specializationId = specializationId;
+  }
+
+  // Update skills if provided
+  if (selectedSkills !== undefined) {
+    if (Array.isArray(selectedSkills) && selectedSkills.length > 0) {
+      // Validate skills against specialization
+      const currentSpecializationId = specializationId || profile.specializationId;
+      if (currentSpecializationId) {
+        const specialization = await Specialization.findById(currentSpecializationId);
+        if (specialization) {
+          const specializationSkills = specialization.skills || [];
+          const normalizedSpecializationSkills = specializationSkills.map(skill => 
+            String(skill).trim().toLowerCase()
+          );
+          
+          const invalidSkills = selectedSkills.filter((skill) => {
+            const normalizedSkill = String(skill).trim().toLowerCase();
+            return !normalizedSpecializationSkills.includes(normalizedSkill);
+          });
+          
+          if (invalidSkills.length > 0) {
+            throw new ApiError(
+              400,
+              `Invalid skills: ${invalidSkills.join(", ")}. Skills must belong to the selected specialization.`
+            );
+          }
+        }
+      }
+      profile.selectedSkills = selectedSkills.map(skill => String(skill).trim()).filter(skill => skill.length > 0);
+    } else {
+      profile.selectedSkills = [];
+    }
+  }
+
+  // Handle file uploads
+  if (req.files?.profilePhoto?.[0]) {
+    profile.profilePhoto = getFileUrl(req.files.profilePhoto[0]);
+  }
+  if (req.files?.resume?.[0]) {
+    profile.resume = getFileUrl(req.files.resume[0]);
+  }
+  if (req.files?.experienceCertificate?.[0]) {
+    profile.experienceCertificate = getFileUrl(req.files.experienceCertificate[0]);
+  }
+  if (req.files?.documents) {
+    const documentUrls = req.files.documents.map((file) => getFileUrl(file));
+    profile.documents = documentUrls;
+  }
+
+  await profile.save();
+
+  // Populate specialization for response
+  await profile.populate("specializationId", "name description skills status");
+
+  // Format response
+  const formattedProfile = {
+    _id: profile._id,
+    phone: profile.phone,
+    phoneVerified: profile.phoneVerified,
+    category: profile.category,
+    role: profile.role,
+    name: profile.name,
+    email: profile.email,
+    gender: profile.gender,
+    dateOfBirth: profile.dateOfBirth,
+    state: profile.state,
+    city: profile.city,
+    specializationId: profile.specializationId?._id || null,
+    specialization: profile.specializationId
+      ? {
+          _id: profile.specializationId._id,
+          name: profile.specializationId.name,
+          description: profile.specializationId.description,
+        }
+      : null,
+    skills: profile.skills || [],
+    selectedSkills: profile.selectedSkills || [],
+    questionAnswers: profile.questionAnswers || [],
+    aadhaarCard: profile.aadhaarCard,
+    profilePhoto: profile.profilePhoto,
+    resume: profile.resume,
+    experienceCertificate: profile.experienceCertificate,
+    documents: profile.documents || [],
+    education: profile.education || null,
+    experienceStatus: profile.experienceStatus,
+    registrationStep: profile.registrationStep,
+    isRegistrationComplete: profile.isRegistrationComplete,
+    status: profile.status,
+    coinBalance: profile.coinBalance || 0,
+    createdAt: profile.createdAt,
+    updatedAt: profile.updatedAt,
+  };
+
+  return res.status(200).json(
+    ApiResponse.success(
+      { profile: formattedProfile },
+      "Profile updated successfully"
+    )
+  );
+});
+

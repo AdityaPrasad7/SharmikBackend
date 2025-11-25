@@ -376,3 +376,76 @@ export const getRecruiterProfile = asyncHandler(async (req, res) => {
   );
 });
 
+/**
+ * Update Recruiter Profile
+ * Allows authenticated recruiter to update their profile information
+ * 
+ * @route PUT /api/recruiters/profile
+ * @requires Authentication (JWT token)
+ */
+export const updateRecruiterProfile = asyncHandler(async (req, res) => {
+  const recruiter = req.recruiter; // From auth middleware
+  const { companyName, email, state, city } = req.body;
+
+  // Find the recruiter
+  const profile = await Recruiter.findById(recruiter._id);
+  if (!profile) {
+    throw new ApiError(404, "Recruiter profile not found");
+  }
+
+  // Update basic information
+  if (companyName !== undefined) {
+    profile.companyName = companyName?.trim() || null;
+  }
+  if (email !== undefined) {
+    profile.email = email?.trim().toLowerCase() || null;
+  }
+  if (state !== undefined) {
+    profile.state = state?.trim() || null;
+  }
+  if (city !== undefined) {
+    profile.city = city?.trim() || null;
+  }
+
+  // Handle file uploads
+  if (req.files?.companyLogo?.[0]) {
+    profile.companyLogo = getFileUrl(req.files.companyLogo[0]);
+    // Also update profilePhoto for backward compatibility
+    profile.profilePhoto = profile.companyLogo;
+  }
+  if (req.files?.documents) {
+    const documentUrls = req.files.documents.map((file) => getFileUrl(file));
+    profile.documents = documentUrls;
+  }
+
+  await profile.save();
+
+  // Format response
+  const formattedProfile = {
+    _id: profile._id,
+    phone: profile.phone,
+    phoneVerified: profile.phoneVerified,
+    companyName: profile.companyName,
+    email: profile.email,
+    state: profile.state,
+    city: profile.city,
+    profilePhoto: profile.profilePhoto,
+    companyLogo: profile.companyLogo,
+    documents: profile.documents || [],
+    registrationStep: profile.registrationStep,
+    isRegistrationComplete: profile.isRegistrationComplete,
+    status: profile.status,
+    coinBalance: profile.coinBalance || 0,
+    role: profile.role,
+    createdAt: profile.createdAt,
+    updatedAt: profile.updatedAt,
+  };
+
+  return res.status(200).json(
+    ApiResponse.success(
+      { profile: formattedProfile },
+      "Profile updated successfully"
+    )
+  );
+});
+

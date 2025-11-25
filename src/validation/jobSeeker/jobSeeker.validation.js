@@ -277,3 +277,52 @@ export const getMyApplicationsSchema = Joi.object({
   limit: Joi.number().integer().min(1).max(100).optional(),
 });
 
+// Update Job Seeker Profile Schema
+export const updateJobSeekerProfileSchema = Joi.object({
+  name: Joi.string().trim().min(1).optional().messages({
+    "string.min": "Name must be at least 1 character",
+  }),
+  email: Joi.string().email().trim().lowercase().optional().messages({
+    "string.email": "Please provide a valid email address",
+  }),
+  gender: Joi.string()
+    .trim()
+    .lowercase()
+    .valid("male", "female", "prefer not to say")
+    .optional()
+    .messages({
+      "any.only": "Gender must be one of: male, female, prefer not to say",
+    }),
+  dateOfBirth: Joi.date().optional().messages({
+    "date.base": "Please provide a valid date of birth",
+  }),
+  state: Joi.string().trim().min(1).optional(),
+  city: Joi.string().trim().min(1).optional(),
+  stateId: Joi.string()
+    .pattern(/^[0-9a-fA-F]{24}$/)
+    .optional()
+    .messages({
+      "string.pattern.base": "Invalid state ID",
+    }),
+  cityId: Joi.string()
+    .pattern(/^[0-9a-fA-F]{24}$/)
+    .optional()
+    .messages({
+      "string.pattern.base": "Invalid city ID",
+    }),
+  specializationId: Joi.string()
+    .pattern(/^[0-9a-fA-F]{24}$/)
+    .optional()
+    .messages({
+      "string.pattern.base": "Invalid specialization ID",
+    }),
+  selectedSkills: Joi.array()
+    .items(Joi.string().trim().min(1))
+    .min(1)
+    .optional()
+    .messages({
+      "array.min": "At least one skill must be selected if skills are provided",
+    }),
+  // Note: Documents (profilePhoto, resume, etc.) are handled via file upload middleware
+});
+

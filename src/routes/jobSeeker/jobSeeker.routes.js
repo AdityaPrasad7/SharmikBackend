@@ -14,6 +14,7 @@ import {
   refreshAccessToken,
   logoutJobSeeker,
   getJobSeekerProfile,
+  updateJobSeekerProfile,
 } from "../../controllers/jobSeeker/jobSeeker.controller.js";
 import { getSuggestedJobs } from "../../controllers/jobSeeker/suggestedJobs.controller.js";
 import {
@@ -35,6 +36,7 @@ import {
   getSkillsByCategorySchema,
   applyForJobSchema,
   getMyApplicationsSchema,
+  updateJobSeekerProfileSchema,
 } from "../../validation/jobSeeker/jobSeeker.validation.js";
 import { uploadFields, uploadToCloudinaryMiddleware } from "../../middlewares/fileUpload.js";
 
@@ -157,8 +159,21 @@ router.patch(
 // Coin Routes
 router.use("/coins", coinRoutes);
 
-// Profile Route - Requires authentication
+// Profile Routes - Requires authentication
 router.get("/profile", verifyJobSeekerJWT, getJobSeekerProfile);
+router.put(
+  "/profile",
+  verifyJobSeekerJWT,
+  uploadFields([
+    { name: "profilePhoto", maxCount: 1 },
+    { name: "resume", maxCount: 1 },
+    { name: "experienceCertificate", maxCount: 1 },
+    { name: "documents", maxCount: 5 },
+  ]),
+  uploadToCloudinaryMiddleware,
+  validateRequest(updateJobSeekerProfileSchema),
+  updateJobSeekerProfile
+);
 
 // Get Job Seeker by Phone - Must be last to avoid route conflicts
 router.get("/phone/:phone", getJobSeekerByPhone);
