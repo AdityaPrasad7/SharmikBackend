@@ -16,6 +16,11 @@ const recruiterSchema = new Schema(
       type: Boolean,
       default: false,
     },
+    // Contact person name
+    name: {
+      type: String,
+      trim: true,
+    },
     companyName: {
       type: String,
       trim: true,
@@ -24,6 +29,21 @@ const recruiterSchema = new Schema(
       type: String,
       trim: true,
       lowercase: true,
+    },
+
+    // Business details
+    website: {
+      type: String,
+      trim: true,
+    },
+    businessType: {
+      type: String,
+      trim: true,
+    },
+    establishedFrom: {
+      type: Number, // Year (e.g., 2015)
+      min: 1800,
+      max: new Date().getFullYear() + 1,
     },
 
     // Location

@@ -1,5 +1,7 @@
 import { Recruiter } from "../../models/recruiter/recruiter.model.js";
 import { JobSeeker } from "../../models/jobSeeker/jobSeeker.model.js";
+import { State } from "../../models/location/state.model.js";
+import { City } from "../../models/location/city.model.js";
 import ApiError from "../../utils/ApiError.js";
 import ApiResponse from "../../utils/ApiResponse.js";
 import { asyncHandler } from "../../utils/asyncHandler.js";
@@ -139,7 +141,16 @@ export const verifyOTP = asyncHandler(async (req, res) => {
  * Register Recruiter (Basic registration)
  */
 export const registerRecruiter = asyncHandler(async (req, res) => {
-  const { phone, recruiterId, companyName, email, state, city } = req.body;
+  const {
+    phone,
+    recruiterId,
+    companyName,
+    email,
+    state,
+    city,
+    stateId,
+    cityId,
+  } = req.body;
 
   const identifier = recruiterId
     ? { _id: recruiterId }
@@ -171,11 +182,36 @@ export const registerRecruiter = asyncHandler(async (req, res) => {
     ? req.files.documents.map((file) => getFileUrl(file))
     : [];
 
-  // Update recruiter
+  // Update recruiter basic info
   recruiter.companyName = companyName || recruiter.companyName;
   recruiter.email = email || recruiter.email;
-  recruiter.state = state || recruiter.state;
-  recruiter.city = city || recruiter.city;
+
+  // Update location (support both names and IDs)
+  if (stateId || cityId) {
+    if (stateId) {
+      const stateDoc = await State.findById(stateId);
+      if (!stateDoc) {
+        throw new ApiError(404, "State not found");
+      }
+      recruiter.state = stateDoc.name;
+    }
+    if (cityId) {
+      const cityDoc = await City.findById(cityId);
+      if (!cityDoc) {
+        throw new ApiError(404, "City not found");
+      }
+      recruiter.city = cityDoc.name;
+
+      // Verify city belongs to state if both are provided
+      if (stateId && cityDoc.stateId.toString() !== stateId) {
+        throw new ApiError(400, "City does not belong to the selected state");
+      }
+    }
+  } else {
+    // Fallback to plain names
+    recruiter.state = state || recruiter.state;
+    recruiter.city = city || recruiter.city;
+  }
   if (companyLogo) {
     recruiter.companyLogo = companyLogo;
     recruiter.profilePhoto = companyLogo;
@@ -345,8 +381,12 @@ export const getRecruiterProfile = asyncHandler(async (req, res) => {
     _id: profile._id,
     phone: profile.phone,
     phoneVerified: profile.phoneVerified,
+    name: profile.name,
     companyName: profile.companyName,
     email: profile.email,
+    website: profile.website,
+    businessType: profile.businessType,
+    establishedFrom: profile.establishedFrom,
     // Location
     state: profile.state,
     city: profile.city,
@@ -387,7 +427,19 @@ export const getRecruiterProfile = asyncHandler(async (req, res) => {
  */
 export const updateRecruiterProfile = asyncHandler(async (req, res) => {
   const recruiter = req.recruiter; // From auth middleware
-  const { companyName, email, state, city, aboutMe } = req.body;
+  const {
+    name,
+    companyName,
+    email,
+    state,
+    city,
+    stateId,
+    cityId,
+    website,
+    businessType,
+    establishedFrom,
+    aboutMe,
+  } = req.body;
 
   // Find the recruiter
   const profile = await Recruiter.findById(recruiter._id);
@@ -396,17 +448,56 @@ export const updateRecruiterProfile = asyncHandler(async (req, res) => {
   }
 
   // Update basic information
+  if (name !== undefined) {
+    profile.name = name?.trim() || null;
+  }
   if (companyName !== undefined) {
     profile.companyName = companyName?.trim() || null;
   }
   if (email !== undefined) {
     profile.email = email?.trim().toLowerCase() || null;
   }
-  if (state !== undefined) {
-    profile.state = state?.trim() || null;
+  // Update location (support both names and IDs)
+  if (stateId || cityId) {
+    if (stateId) {
+      const stateDoc = await State.findById(stateId);
+      if (!stateDoc) {
+        throw new ApiError(404, "State not found");
+      }
+      profile.state = stateDoc.name;
+    }
+    if (cityId) {
+      const cityDoc = await City.findById(cityId);
+      if (!cityDoc) {
+        throw new ApiError(404, "City not found");
+      }
+      profile.city = cityDoc.name;
+
+      // Verify city belongs to state if both are provided
+      if (stateId && cityDoc.stateId.toString() !== stateId) {
+        throw new ApiError(400, "City does not belong to the selected state");
+      }
+    }
+  } else {
+    if (state !== undefined) {
+      profile.state = state?.trim() || null;
+    }
+    if (city !== undefined) {
+      profile.city = city?.trim() || null;
+    }
   }
-  if (city !== undefined) {
-    profile.city = city?.trim() || null;
+  if (website !== undefined) {
+    profile.website = website?.trim() || null;
+  }
+  if (businessType !== undefined) {
+    profile.businessType = businessType?.trim() || null;
+  }
+  if (establishedFrom !== undefined) {
+    // If empty string, set to null; else cast to number
+    profile.establishedFrom =
+      establishedFrom === "" || establishedFrom === null
+        ? null
+        : Number(establishedFrom);
   }
   if (aboutMe !== undefined) {
     profile.aboutMe = aboutMe?.trim() || null;
@@ -430,8 +521,12 @@ export const updateRecruiterProfile = asyncHandler(async (req, res) => {
     _id: profile._id,
     phone: profile.phone,
     phoneVerified: profile.phoneVerified,
+    name: profile.name,
     companyName: profile.companyName,
     email: profile.email,
+    website: profile.website,
+    businessType: profile.businessType,
+    establishedFrom: profile.establishedFrom,
     state: profile.state,
     city: profile.city,
     profilePhoto: profile.profilePhoto,

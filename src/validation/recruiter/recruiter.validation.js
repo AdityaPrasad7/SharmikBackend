@@ -37,18 +37,54 @@ const objectIdSchema = Joi.string()
     "string.length": "recruiterId must be exactly 24 characters",
   });
 
+// State ID Schema (MongoDB ObjectId)
+const stateIdSchema = Joi.string()
+  .pattern(/^[0-9a-fA-F]{24}$/)
+  .optional()
+  .messages({
+    "string.pattern.base": "Invalid state ID",
+  });
+
+// City ID Schema (MongoDB ObjectId)
+const cityIdSchema = Joi.string()
+  .pattern(/^[0-9a-fA-F]{24}$/)
+  .optional()
+  .messages({
+    "string.pattern.base": "Invalid city ID",
+  });
+
 // Recruiter Registration Schema (basic for now)
 export const recruiterRegistrationSchema = Joi.object({
   phone: phoneSchema.optional(),
   recruiterId: objectIdSchema.optional(),
+  name: Joi.string().trim().allow("").optional(),
   companyName: Joi.string().trim().allow("").optional(),
   email: Joi.string().email().trim().lowercase().optional(),
   state: Joi.string().trim().min(1).optional(),
   city: Joi.string().trim().min(1).optional(),
+  stateId: stateIdSchema,
+  cityId: cityIdSchema,
+  website: Joi.string().uri().trim().optional().allow("").messages({
+    "string.uri": "Website must be a valid URL",
+  }),
+  businessType: Joi.string().trim().max(100).optional().allow(""),
+  establishedFrom: Joi.number()
+    .integer()
+    .min(1800)
+    .max(new Date().getFullYear() + 1)
+    .optional()
+    .messages({
+      "number.base": "Established from must be a valid year",
+      "number.min": "Established from must be greater than or equal to 1800",
+      "number.max": "Established from cannot be in the far future",
+    }),
 }).or("phone", "recruiterId");
 
 // Update Recruiter Profile Schema
 export const updateRecruiterProfileSchema = Joi.object({
+  name: Joi.string().trim().min(1).optional().messages({
+    "string.min": "Name must be at least 1 character",
+  }),
   companyName: Joi.string().trim().min(1).optional().messages({
     "string.min": "Company name must be at least 1 character",
   }),
@@ -57,6 +93,22 @@ export const updateRecruiterProfileSchema = Joi.object({
   }),
   state: Joi.string().trim().min(1).optional(),
   city: Joi.string().trim().min(1).optional(),
+  stateId: stateIdSchema,
+  cityId: cityIdSchema,
+  website: Joi.string().uri().trim().optional().allow("").messages({
+    "string.uri": "Website must be a valid URL",
+  }),
+  businessType: Joi.string().trim().max(100).optional().allow(""),
+  establishedFrom: Joi.number()
+    .integer()
+    .min(1800)
+    .max(new Date().getFullYear() + 1)
+    .optional()
+    .messages({
+      "number.base": "Established from must be a valid year",
+      "number.min": "Established from must be greater than or equal to 1800",
+      "number.max": "Established from cannot be in the far future",
+    }),
   aboutMe: Joi.string().trim().max(2000).optional().allow("").messages({
     "string.max": "About me section must not exceed 2000 characters",
   }),
