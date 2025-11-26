@@ -49,6 +49,12 @@ const recruiterSchema = new Schema(
       },
     ],
 
+    // About Me Section
+    aboutMe: {
+      type: String,
+      trim: true,
+    },
+
     // Registration Status
     registrationStep: {
       type: Number,

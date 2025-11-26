@@ -129,6 +129,12 @@ const jobSeekerSchema = new Schema(
         default: false,
     },
 
+    // About Me Section
+    aboutMe: {
+      type: String,
+      trim: true,
+    },
+
     // Registration Status
     registrationStep: {
       type: Number,

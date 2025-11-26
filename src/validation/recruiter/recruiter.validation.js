@@ -57,6 +57,9 @@ export const updateRecruiterProfileSchema = Joi.object({
   }),
   state: Joi.string().trim().min(1).optional(),
   city: Joi.string().trim().min(1).optional(),
+  aboutMe: Joi.string().trim().max(2000).optional().allow("").messages({
+    "string.max": "About me section must not exceed 2000 characters",
+  }),
   // Note: Documents (companyLogo, etc.) are handled via file upload middleware
 });
 

@@ -1065,6 +1065,8 @@ export const getJobSeekerProfile = asyncHandler(async (req, res) => {
     education: profile.education || null,
     // Experience Status
     experienceStatus: profile.experienceStatus,
+    // About Me
+    aboutMe: profile.aboutMe || null,
     // Registration Status
     registrationStep: profile.registrationStep,
     isRegistrationComplete: profile.isRegistrationComplete,
@@ -1105,6 +1107,7 @@ export const updateJobSeekerProfile = asyncHandler(async (req, res) => {
     cityId,
     specializationId,
     selectedSkills,
+    aboutMe,
   } = req.body;
 
   // Find the job seeker
@@ -1199,6 +1202,11 @@ export const updateJobSeekerProfile = asyncHandler(async (req, res) => {
     }
   }
 
+  // Update about me section
+  if (aboutMe !== undefined) {
+    profile.aboutMe = aboutMe?.trim() || null;
+  }
+
   // Handle file uploads
   if (req.files?.profilePhoto?.[0]) {
     profile.profilePhoto = getFileUrl(req.files.profilePhoto[0]);
@@ -1250,6 +1258,7 @@ export const updateJobSeekerProfile = asyncHandler(async (req, res) => {
     documents: profile.documents || [],
     education: profile.education || null,
     experienceStatus: profile.experienceStatus,
+    aboutMe: profile.aboutMe || null,
     registrationStep: profile.registrationStep,
     isRegistrationComplete: profile.isRegistrationComplete,
     status: profile.status,

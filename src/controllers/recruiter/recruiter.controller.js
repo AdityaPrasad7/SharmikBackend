@@ -354,6 +354,8 @@ export const getRecruiterProfile = asyncHandler(async (req, res) => {
     profilePhoto: profile.profilePhoto,
     companyLogo: profile.companyLogo,
     documents: profile.documents || [],
+    // About Me
+    aboutMe: profile.aboutMe || null,
     // Registration Status
     registrationStep: profile.registrationStep,
     isRegistrationComplete: profile.isRegistrationComplete,
@@ -385,7 +387,7 @@ export const getRecruiterProfile = asyncHandler(async (req, res) => {
  */
 export const updateRecruiterProfile = asyncHandler(async (req, res) => {
   const recruiter = req.recruiter; // From auth middleware
-  const { companyName, email, state, city } = req.body;
+  const { companyName, email, state, city, aboutMe } = req.body;
 
   // Find the recruiter
   const profile = await Recruiter.findById(recruiter._id);
@@ -405,6 +407,9 @@ export const updateRecruiterProfile = asyncHandler(async (req, res) => {
   }
   if (city !== undefined) {
     profile.city = city?.trim() || null;
+  }
+  if (aboutMe !== undefined) {
+    profile.aboutMe = aboutMe?.trim() || null;
   }
 
   // Handle file uploads
@@ -432,6 +437,7 @@ export const updateRecruiterProfile = asyncHandler(async (req, res) => {
     profilePhoto: profile.profilePhoto,
     companyLogo: profile.companyLogo,
     documents: profile.documents || [],
+    aboutMe: profile.aboutMe || null,
     registrationStep: profile.registrationStep,
     isRegistrationComplete: profile.isRegistrationComplete,
     status: profile.status,

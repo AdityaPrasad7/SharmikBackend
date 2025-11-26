@@ -323,6 +323,9 @@ export const updateJobSeekerProfileSchema = Joi.object({
     .messages({
       "array.min": "At least one skill must be selected if skills are provided",
     }),
+  aboutMe: Joi.string().trim().max(2000).optional().allow("").messages({
+    "string.max": "About me section must not exceed 2000 characters",
+  }),
   // Note: Documents (profilePhoto, resume, etc.) are handled via file upload middleware
 });
 
