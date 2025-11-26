@@ -1208,6 +1208,9 @@ export const updateJobSeekerProfile = asyncHandler(async (req, res) => {
   }
 
   // Handle file uploads
+  if (req.files?.aadhaarCard?.[0]) {
+    profile.aadhaarCard = getFileUrl(req.files.aadhaarCard[0]);
+  }
   if (req.files?.profilePhoto?.[0]) {
     profile.profilePhoto = getFileUrl(req.files.profilePhoto[0]);
   }

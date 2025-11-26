@@ -206,7 +206,7 @@ export const getMyApplications = asyncHandler(async (req, res) => {
     if (status === "Accepted") {
       filter.status = "Shortlisted";
     } else {
-      filter.status = status;
+    filter.status = status;
     }
   }
 

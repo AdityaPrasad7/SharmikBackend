@@ -13,6 +13,7 @@ import recruiterRoutes from "./recruiter/recruiter.routes.js";
 import roleRoutes from "./role/role.routes.js";
 import locationRoutes from "./location/location.routes.js";
 import skillsRoutes from "./skills/skills.routes.js";
+import chatRoutes from "./chat/chat.routes.js";
 
 const router = Router();
 
@@ -39,5 +40,6 @@ router.use("/api/recruiters", recruiterRoutes);
 router.use("/api/roles", roleRoutes);
 router.use("/api/location", locationRoutes);
 router.use("/api/skills", skillsRoutes);
+router.use("/api/chat", chatRoutes);
 
 export default router;

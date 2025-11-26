@@ -165,6 +165,7 @@ router.put(
   "/profile",
   verifyJobSeekerJWT,
   uploadFields([
+    { name: "aadhaarCard", maxCount: 1 },
     { name: "profilePhoto", maxCount: 1 },
     { name: "resume", maxCount: 1 },
     { name: "experienceCertificate", maxCount: 1 },
