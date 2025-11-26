@@ -10,6 +10,7 @@ import { validateRequest } from "../../middlewares/recruiter/validateRecruiter.j
 import { createRecruiterJobSchema } from "../../validation/recruiter/jobPost/jobPost.validation.js";
 import { verifyRecruiterJWT } from "../../middlewares/recruiter/authRecruiter.js";
 import { optionalJobSeekerAuth } from "../../middlewares/jobSeeker/authJobSeeker.js";
+import { ensureRecruiterProfileComplete } from "../../middlewares/recruiter/ensureProfileComplete.js";
 
 const router = Router();
 
@@ -35,6 +36,7 @@ router.get("/jobs/:id", getJobPostById);
 router.post(
   "/jobs",
   verifyRecruiterJWT,
+  ensureRecruiterProfileComplete,
   validateRequest(createRecruiterJobSchema),
   createRecruiterJob
 );
