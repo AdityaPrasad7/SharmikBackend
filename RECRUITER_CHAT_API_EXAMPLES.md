@@ -643,3 +643,5 @@ GET /api/chat/recruiters/conversations?page=1&limit=20&status=active
 
 7. **Status Filter**: When fetching conversations, you can filter by `status=active` or `status=archived`. Default is "active".
 
+
+

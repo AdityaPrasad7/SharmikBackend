@@ -77,3 +77,5 @@ conversationSchema.index({ job: 1, recruiter: 1, jobSeeker: 1 });
 
 export const Conversation = model("Conversation", conversationSchema);
 
+
+

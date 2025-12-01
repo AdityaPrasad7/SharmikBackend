@@ -928,3 +928,182 @@ export const deactivateJob = asyncHandler(async (req, res) => {
   );
 });
 
+/**
+ * Get All Jobs for a Specific Recruiter
+ * Returns all job posts posted by a specific recruiter
+ * Supports filtering by status, pagination, and sorting
+ * 
+ * @route GET /api/recruiters/:recruiterId/jobs
+ * @route GET /api/recruiters/jobs/my-jobs (when authenticated)
+ * @param {string} recruiterId - Recruiter ID (optional if authenticated)
+ * @query {string} status - Filter by job status (Open, Closed, Draft, Archived, all)
+ * @query {number} page - Page number (default: 1)
+ * @query {number} limit - Items per page (default: 10, max: 100)
+ * @query {string} sortBy - Sort field (createdAt, updatedAt, applicationCount)
+ * @query {string} sortOrder - Sort order (asc, desc)
+ */
+export const getRecruiterJobs = asyncHandler(async (req, res) => {
+  const { recruiterId } = req.params;
+  const {
+    status,
+    page = 1,
+    limit = 10,
+    sortBy = "createdAt",
+    sortOrder = "desc",
+  } = req.query;
+
+  // Determine which recruiter ID to use
+  let targetRecruiterId;
+  
+  // If recruiterId is provided in params, use it
+  if (recruiterId) {
+    // Validate recruiter ID format
+    if (!mongoose.Types.ObjectId.isValid(recruiterId)) {
+      throw new ApiError(400, "Invalid recruiter ID format");
+    }
+    targetRecruiterId = recruiterId;
+  } 
+  // If authenticated recruiter is making the request, use their ID
+  else if (req.recruiter) {
+    targetRecruiterId = req.recruiter._id.toString();
+  } 
+  // Otherwise, throw error
+  else {
+    throw new ApiError(400, "Recruiter ID is required");
+  }
+
+  // Verify recruiter exists
+  const recruiter = await Recruiter.findById(targetRecruiterId).select("companyName companyLogo city state email phone");
+  if (!recruiter) {
+    throw new ApiError(404, "Recruiter not found");
+  }
+
+  // Build filter object
+  const filter = {
+    recruiter: targetRecruiterId,
+  };
+
+  // Status filter
+  if (status) {
+    if (status === "all") {
+      // If "all" is specified, don't filter by status
+    } else {
+      filter.status = status;
+    }
+  }
+
+  // Pagination
+  const pageNumber = Math.max(1, parseInt(page));
+  const limitNumber = Math.min(100, Math.max(1, parseInt(limit))); // Max 100 per page
+  const skip = (pageNumber - 1) * limitNumber;
+
+  // Sort options
+  const sortOptions = {};
+  if (sortBy === "applicationCount") {
+    sortOptions.applicationCount = sortOrder === "asc" ? 1 : -1;
+  } else if (sortBy === "updatedAt") {
+    sortOptions.updatedAt = sortOrder === "asc" ? 1 : -1;
+  } else {
+    // Default to createdAt
+    sortOptions.createdAt = sortOrder === "asc" ? 1 : -1;
+  }
+
+  // Fetch jobs with pagination
+  const jobs = await RecruiterJob.find(filter)
+    .populate("recruiter", "companyName companyLogo city state email phone")
+    .sort(sortOptions)
+    .skip(skip)
+    .limit(limitNumber)
+    .lean();
+
+  // Get total count for pagination
+  const totalJobs = await RecruiterJob.countDocuments(filter);
+  const totalPages = Math.ceil(totalJobs / limitNumber);
+
+  // Format jobs with summary
+  const formattedJobs = jobs.map((job) => {
+    const salaryLabel = `₹${Math.round(job.expectedSalary.min).toLocaleString("en-IN")} - ₹${Math.round(
+      job.expectedSalary.max
+    ).toLocaleString("en-IN")}/${job.expectedSalary.payPeriod === "monthly" ? "month" : "year"}`;
+
+    const experienceLabel = job.experienceRange.maxYears
+      ? `${job.experienceRange.minYears}-${job.experienceRange.maxYears} YoE`
+      : `${job.experienceRange.minYears}+ YoE`;
+
+    const preferredAgeLabel = job.preferredAgeRange
+      ? job.preferredAgeRange.maxAge
+        ? `${job.preferredAgeRange.minAge}-${job.preferredAgeRange.maxAge} years`
+        : job.preferredAgeRange.minAge
+          ? `${job.preferredAgeRange.minAge}+ years`
+          : null
+      : null;
+
+    return {
+      _id: job._id,
+      jobTitle: job.jobTitle,
+      jobDescription: job.jobDescription,
+      city: job.city,
+      expectedSalary: job.expectedSalary,
+      salaryLabel,
+      employeeCount: job.employeeCount,
+      vacancyCount: job.vacancyCount,
+      jobType: job.jobType,
+      employmentMode: job.employmentMode,
+      jobSeekerCategory: job.jobSeekerCategory,
+      categories: job.categories,
+      tags: job.tags,
+      skills: job.skills,
+      benefits: job.benefits,
+      experienceRange: job.experienceRange,
+      experienceLabel,
+      preferredAgeRange: job.preferredAgeRange || null,
+      preferredAgeLabel,
+      qualifications: job.qualifications,
+      responsibilities: job.responsibilities,
+      companySnapshot: job.companySnapshot,
+      recruiter: job.recruiter,
+      status: job.status,
+      applicationCount: job.applicationCount,
+      createdAt: job.createdAt,
+      updatedAt: job.updatedAt,
+      summary: {
+        salaryLabel,
+        experienceLabel,
+        preferredAgeLabel,
+        jobTags: [
+          job.jobType,
+          job.employmentMode,
+          experienceLabel,
+        ],
+      },
+    };
+  });
+
+  return res.status(200).json(
+    ApiResponse.success(
+      {
+        recruiter: {
+          _id: recruiter._id,
+          companyName: recruiter.companyName,
+          companyLogo: recruiter.companyLogo,
+          city: recruiter.city,
+          state: recruiter.state,
+        },
+        jobs: formattedJobs,
+        pagination: {
+          currentPage: pageNumber,
+          totalPages,
+          totalJobs,
+          limit: limitNumber,
+          hasNextPage: pageNumber < totalPages,
+          hasPrevPage: pageNumber > 1,
+        },
+        filters: {
+          status: status === "all" ? "all" : filter.status || "all",
+        },
+      },
+      `Found ${totalJobs} job${totalJobs !== 1 ? "s" : ""} for this recruiter`
+    )
+  );
+});
+

@@ -5,6 +5,7 @@ import {
   getJobPostById,
   updateVacancyCount,
   deactivateJob,
+  getRecruiterJobs,
 } from "../../controllers/recruiter/jobPost/jobPost.controller.js";
 import { validateRequest } from "../../middlewares/recruiter/validateRecruiter.js";
 import { createRecruiterJobSchema } from "../../validation/recruiter/jobPost/jobPost.validation.js";
@@ -55,6 +56,24 @@ router.patch("/jobs/:jobId/vacancy-count", verifyRecruiterJWT, updateVacancyCoun
  * Requires: Recruiter authentication (JWT token)
  */
 router.patch("/jobs/:jobId/deactivate", verifyRecruiterJWT, deactivateJob);
+
+/**
+ * GET /api/recruiters/jobs/my-jobs
+ * Get all job posts for the authenticated recruiter
+ * Requires: Recruiter authentication (JWT token)
+ * Supports filtering by status, pagination, and sorting
+ * Note: This route must come before /:recruiterId/jobs to avoid route conflicts
+ */
+router.get("/jobs/my-jobs", verifyRecruiterJWT, getRecruiterJobs);
+
+/**
+ * GET /api/recruiters/:recruiterId/jobs
+ * Get all job posts for a specific recruiter
+ * Public endpoint - no authentication required
+ * Supports filtering by status, pagination, and sorting
+ * Note: This route should be last among job routes to avoid conflicts with more specific routes
+ */
+router.get("/:recruiterId/jobs", getRecruiterJobs);
 
 export default router;
 

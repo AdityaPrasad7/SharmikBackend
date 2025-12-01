@@ -345,3 +345,5 @@ All job seeker endpoints follow the same pattern as recruiter endpoints, but wit
 - All endpoints require authentication
 - File attachments support is prepared but not fully implemented (messageType: "file" or "image")
 
+
+
