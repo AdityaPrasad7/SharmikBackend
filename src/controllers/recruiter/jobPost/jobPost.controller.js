@@ -928,6 +928,103 @@ export const deactivateJob = asyncHandler(async (req, res) => {
   );
 });
 
+
+
+
+/* Repost Job By Recruter */
+
+export const repostJob = asyncHandler(async (req, res) => {
+  const recruiter = req.recruiter;
+  const { jobId } = req.params;
+
+  if (!mongoose.Types.ObjectId.isValid(jobId)) {
+    throw new ApiError(400, "Invalid job ID format");
+  }
+
+  const oldJob = await RecruiterJob.findById(jobId);
+  if (!oldJob) throw new ApiError(404, "Job not found");
+
+  if (oldJob.recruiter.toString() !== recruiter._id.toString()) {
+    throw new ApiError(403, "Not authorized to repost this job");
+  }
+
+  // ✅ Only CLOSED jobs can be reposted
+  if (oldJob.status !== "Closed") {
+    throw new ApiError(400, "Only closed jobs can be reposted");
+  }
+
+  // Convert to plain object and remove internal fields
+  const cloned = oldJob.toObject({ depopulate: true });
+  delete cloned._id;
+  delete cloned.__v;
+  delete cloned.createdAt;
+  delete cloned.updatedAt;
+
+  // Reset counters & relations we don't want to carry over
+  cloned.applicationCount = 0;
+  if ("applicants" in cloned) delete cloned.applicants;
+  cloned.repostedFrom = oldJob._id;
+  cloned.recruiter = recruiter._id;
+
+  // Handle salary field differences
+  const schemaPaths = RecruiterJob.schema.paths;
+
+  if (schemaPaths["expectedSalary"]) {
+    if (!cloned.expectedSalary) {
+      if (cloned.expectedSalaryMin && cloned.expectedSalaryMax) {
+        cloned.expectedSalary = {
+          min: cloned.expectedSalaryMin,
+          max: cloned.expectedSalaryMax,
+        };
+      }
+    }
+  } else {
+    if (!("expectedSalaryMin" in cloned) && cloned.expectedSalary) {
+      if (typeof cloned.expectedSalary === "object") {
+        cloned.expectedSalaryMin = cloned.expectedSalary.min ?? cloned.expectedSalaryMin;
+        cloned.expectedSalaryMax = cloned.expectedSalary.max ?? cloned.expectedSalaryMax;
+      }
+    }
+  }
+
+  // Ensure status is a valid enum
+  let statusEnum = [];
+  if (RecruiterJob.schema.path("status") && RecruiterJob.schema.path("status").enumValues) {
+    statusEnum = RecruiterJob.schema.path("status").enumValues;
+  }
+
+  if (statusEnum.length > 0) {
+    const oldStatus = String(oldJob.status || "").trim();
+    if (oldStatus && statusEnum.includes(oldStatus)) {
+      cloned.status = oldStatus;
+    } else {
+      cloned.status = statusEnum[0];
+    }
+  } else {
+    cloned.status = "Active";
+  }
+
+  // Ensure fresh createdAt
+  delete cloned.createdAt;
+
+  try {
+    const newJob = await RecruiterJob.create(cloned);
+    return res.status(201).json(
+      ApiResponse.success(
+        { oldJobId: oldJob._id, newJob },
+        "Job reposted successfully"
+      )
+    );
+  } catch (err) {
+    if (err.name === "ValidationError") {
+      throw new ApiError(400, `RecruiterJob validation failed: ${err.message}`);
+    }
+    throw err;
+  }
+});
+
+
+
 /**
  * Get All Jobs for a Specific Recruiter
  * Returns all job posts posted by a specific recruiter

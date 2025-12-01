@@ -6,6 +6,7 @@ import {
   updateVacancyCount,
   deactivateJob,
   getRecruiterJobs,
+  repostJob,
 } from "../../controllers/recruiter/jobPost/jobPost.controller.js";
 import { validateRequest } from "../../middlewares/recruiter/validateRecruiter.js";
 import { createRecruiterJobSchema } from "../../validation/recruiter/jobPost/jobPost.validation.js";
@@ -15,13 +16,14 @@ import { ensureRecruiterProfileComplete } from "../../middlewares/recruiter/ensu
 
 const router = Router();
 
-/**
+/** 
  * GET /api/recruiters/jobs
  * Get all job posts with optional filtering and pagination
  * Public endpoint - but if job seeker is authenticated, filters by their category
  */
 router.get("/jobs", optionalJobSeekerAuth, getAllJobPosts);
 
+router.get("/jobs/my-jobs", verifyRecruiterJWT, getRecruiterJobs);
 /**
  * GET /api/recruiters/jobs/:id
  * Get a specific job post by ID
@@ -50,6 +52,14 @@ router.post(
  */
 router.patch("/jobs/:jobId/vacancy-count", verifyRecruiterJWT, updateVacancyCount);
 
+
+
+/* Repost Job Api */
+
+
+
+router.patch("/jobs/:jobId/repost", verifyRecruiterJWT, repostJob);
+
 /**
  * PATCH /api/recruiters/jobs/:jobId/deactivate
  * Manually deactivate/close a job post
@@ -64,7 +74,7 @@ router.patch("/jobs/:jobId/deactivate", verifyRecruiterJWT, deactivateJob);
  * Supports filtering by status, pagination, and sorting
  * Note: This route must come before /:recruiterId/jobs to avoid route conflicts
  */
-router.get("/jobs/my-jobs", verifyRecruiterJWT, getRecruiterJobs);
+
 
 /**
  * GET /api/recruiters/:recruiterId/jobs
