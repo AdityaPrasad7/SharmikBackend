@@ -4,6 +4,8 @@ import {
   getJobApplicants,
   shortlistApplicant,
   rejectApplicant,
+  getJobsWithShortlistedCandidates,
+  getShortlistedApplicantsForJob,
 } from "../../../controllers/recruiter/application/application.controller.js";
 import { verifyRecruiterJWT } from "../../../middlewares/recruiter/authRecruiter.js";
 
@@ -24,6 +26,17 @@ router.get("/jobs/applications", verifyRecruiterJWT, getJobsWithApplications);
  * Requires: Recruiter authentication (JWT token)
  */
 router.get("/jobs/:jobId/applicants", verifyRecruiterJWT, getJobApplicants);
+router.get(
+  "/jobs/with-shortlisted",
+  verifyRecruiterJWT,
+  getJobsWithShortlistedCandidates
+);
+
+router.get(
+  "/jobs/:jobId/shortlisted",
+  verifyRecruiterJWT,
+  getShortlistedApplicantsForJob
+);
 
 /**
  * PATCH /api/recruiters/applications/:applicationId/shortlist

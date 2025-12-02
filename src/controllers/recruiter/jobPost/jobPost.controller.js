@@ -993,16 +993,19 @@ export const repostJob = asyncHandler(async (req, res) => {
     statusEnum = RecruiterJob.schema.path("status").enumValues;
   }
 
-  if (statusEnum.length > 0) {
-    const oldStatus = String(oldJob.status || "").trim();
-    if (oldStatus && statusEnum.includes(oldStatus)) {
-      cloned.status = oldStatus;
-    } else {
-      cloned.status = statusEnum[0];
-    }
-  } else {
+ // Force reposted job to become Active/Open
+if (statusEnum.length > 0) {
+  if (statusEnum.includes("Active")) {
     cloned.status = "Active";
+  } else if (statusEnum.includes("Open")) {
+    cloned.status = "Open";
+  } else {
+    cloned.status = statusEnum[0]; // fallback
   }
+} else {
+  cloned.status = "Active";
+}
+
 
   // Ensure fresh createdAt
   delete cloned.createdAt;

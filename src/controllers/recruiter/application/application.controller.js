@@ -530,3 +530,107 @@ export const rejectApplicant = asyncHandler(async (req, res) => {
   );
 });
 
+// Get jobs that have shortlisted candidates
+export const getJobsWithShortlistedCandidates = asyncHandler(async (req, res) => {
+  const recruiter = req.recruiter; // From auth middleware
+
+  // Step 1: Get all jobs created by recruiter
+  const jobs = await RecruiterJob.find({ recruiter: recruiter._id })
+    .select("jobTitle status city jobType employmentMode createdAt")
+    .lean();
+
+  const jobIds = jobs.map((job) => job._id);
+
+  // Step 2: Get shortlist counts for these jobs
+  const shortlistedCounts = await Application.aggregate([
+    { 
+      $match: { 
+        job: { $in: jobIds },
+        status: "Shortlisted"
+      }
+    },
+    {
+      $group: {
+        _id: "$job",
+        shortlistedCount: { $sum: 1 }
+      }
+    }
+  ]);
+
+  // Convert to map for quick lookup
+  const shortlistedMap = {};
+  shortlistedCounts.forEach((x) => {
+    shortlistedMap[x._id] = x.shortlistedCount;
+  });
+
+  // Step 3: Filter jobs that have shortlisted applicants
+  const filteredJobs = jobs
+    .map((job) => ({
+      ...job,
+      shortlistedCount: shortlistedMap[job._id] || 0,
+    }))
+    .filter((job) => job.shortlistedCount > 0);
+
+  return res.status(200).json(
+    ApiResponse.success(
+      {
+        jobs: filteredJobs,
+      },
+      "Jobs with shortlisted applicants fetched successfully"
+    )
+  );
+});
+
+
+// Get shortlisted applicants for a specific job
+export const getShortlistedApplicantsForJob = asyncHandler(async (req, res) => {
+  const recruiter = req.recruiter;
+  const { jobId } = req.params;
+
+  if (!mongoose.Types.ObjectId.isValid(jobId)) {
+    throw new ApiError(400, "Invalid job ID format");
+  }
+
+  // Check job ownership
+  const job = await RecruiterJob.findById(jobId);
+  if (!job) {
+    throw new ApiError(404, "Job not found");
+  }
+
+  if (job.recruiter.toString() !== recruiter._id.toString()) {
+    throw new ApiError(403, "You are not authorized to view applicants for this job");
+  }
+
+  // Fetch only shortlisted applications
+  const applications = await Application.find({
+    job: jobId,
+    status: "Shortlisted",
+  })
+    .populate({
+      path: "jobSeeker",
+      select:
+        "name email phone gender city state profilePhoto resume specializationId selectedSkills",
+      populate: {
+        path: "specializationId",
+        select: "name skills",
+      },
+    })
+    .sort({ createdAt: -1 })
+    .lean();
+
+  return res.status(200).json(
+    ApiResponse.success(
+      {
+        job: {
+          _id: job._id,
+          jobTitle: job.jobTitle,
+          city: job.city,
+          jobType: job.jobType,
+          employmentMode: job.employmentMode,
+        },
+        shortlistedApplicants: applications,
+      },
+      "Shortlisted applicants fetched successfully"
+    )
+  );
+});
