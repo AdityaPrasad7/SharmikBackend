@@ -530,6 +530,58 @@ export const rejectApplicant = asyncHandler(async (req, res) => {
   );
 });
 
+export const getAllShortlistedCandidates = asyncHandler(async (req, res) => {
+  const recruiter = req.recruiter;
+
+  console.log("🔵 Logged-in Recruiter ID:", recruiter._id.toString());
+
+  // 1. Get all job IDs
+  const jobs = await RecruiterJob.find({ recruiter: recruiter._id }).select("_id recruiter");
+
+  // Debug: Print job recruiter IDs
+  console.log("🟡 Jobs found for this recruiter:");
+  jobs.forEach(j => {
+    console.log("   ➤ Job ID:", j._id.toString(), "| Recruiter in job:", j.recruiter.toString());
+  });
+
+  if (!jobs.length) {
+    return res.status(200).json(
+      ApiResponse.success(
+        { total: 0, shortlisted: [] },
+        "No jobs found for this recruiter"
+      )
+    );
+  }
+
+  // 2. Convert job IDs → ObjectId
+  const jobIds = jobs.map((job) => new mongoose.Types.ObjectId(job._id));
+
+  // 3. Fetch shortlisted applications
+  const shortlistedApplications = await Application.find({
+    status: "Shortlisted",
+    job: { $in: jobIds }
+  })
+    .populate("job", "jobTitle city jobType employmentMode")
+    .populate("jobSeeker", "name phone email profilePhoto selectedSkills resume gender")
+    .sort({ updatedAt: -1 });
+
+  return res.status(200).json(
+    ApiResponse.success(
+      {
+        total: shortlistedApplications.length,
+        shortlisted: shortlistedApplications
+      },
+      "All shortlisted candidates fetched successfully"
+    )
+  );
+});
+
+
+
+
+
+
+
 // Get jobs that have shortlisted candidates
 export const getJobsWithShortlistedCandidates = asyncHandler(async (req, res) => {
   const recruiter = req.recruiter; // From auth middleware
@@ -587,21 +639,23 @@ export const getShortlistedApplicantsForJob = asyncHandler(async (req, res) => {
   const recruiter = req.recruiter;
   const { jobId } = req.params;
 
+  // Validate job ID
   if (!mongoose.Types.ObjectId.isValid(jobId)) {
     throw new ApiError(400, "Invalid job ID format");
   }
 
-  // Check job ownership
-  const job = await RecruiterJob.findById(jobId);
+  // FIX: Fetch job again
+  const job = await RecruiterJob.findById(jobId).lean();
   if (!job) {
     throw new ApiError(404, "Job not found");
   }
 
+  // Validate job ownership
   if (job.recruiter.toString() !== recruiter._id.toString()) {
     throw new ApiError(403, "You are not authorized to view applicants for this job");
   }
 
-  // Fetch only shortlisted applications
+  // Fetch shortlisted applicants for this job
   const applications = await Application.find({
     job: jobId,
     status: "Shortlisted",
@@ -615,7 +669,7 @@ export const getShortlistedApplicantsForJob = asyncHandler(async (req, res) => {
         select: "name skills",
       },
     })
-    .sort({ createdAt: -1 })
+    .sort({ updatedAt: -1 }) // Most recent shortlist first
     .lean();
 
   return res.status(200).json(
@@ -634,3 +688,5 @@ export const getShortlistedApplicantsForJob = asyncHandler(async (req, res) => {
     )
   );
 });
+
+

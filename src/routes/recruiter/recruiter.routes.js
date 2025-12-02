@@ -31,7 +31,9 @@ import {
   uploadFields,
   uploadToCloudinaryMiddleware,
 } from "../../middlewares/fileUpload.js";
-
+import {
+  getAllShortlistedCandidates,
+} from "../../controllers/recruiter/application/application.controller.js";
 const router = Router();
 
 // OTP Routes
@@ -65,7 +67,7 @@ router.post("/logout", logoutRecruiter);
 
 // Dashboard Routes
 router.use("/", dashboardRoutes);
-
+router.get("/applications/shortlisted", verifyRecruiterJWT, getAllShortlistedCandidates);
 // Application Routes (for viewing jobs with applications and applicants)
 router.use("/", applicationRoutes);
 
@@ -97,6 +99,8 @@ router.put(
   validateRequest(updateRecruiterProfileSchema),
   updateRecruiterProfile
 );
+// Get all shortlisted candidates across all jobs
+
 
 // Get Recruiter by Phone - Must be last to avoid route conflicts
 router.get("/:phone", getRecruiterByPhone);
