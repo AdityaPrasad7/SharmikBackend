@@ -281,3 +281,58 @@ const handleRecruiterVerification = async (req, res, recruiter, phone, purpose) 
     )
   );
 };
+
+// Unified Logout for BOTH Recruiter and JobSeeker
+
+export const unifiedLogout = asyncHandler(async (req, res) => {
+  // Extract refresh token from either cookie or body
+  const refreshToken =
+    req.body.refreshToken ||
+    req.cookies?.recruiterRefreshToken ||
+    req.cookies?.refreshToken;
+
+  if (!refreshToken) {
+    throw new ApiError(400, "Refresh token missing");
+  }
+
+  // Try Recruiter first
+  let user = await Recruiter.findOne({ refreshToken }).select("+refreshToken");
+
+  if (user) {
+    user.refreshToken = null;
+    await user.save();
+
+    // Clear recruiter cookie
+    res.clearCookie("recruiterRefreshToken", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+    });
+
+    return res
+      .status(200)
+      .json(ApiResponse.success(null, "Recruiter logged out successfully"));
+  }
+
+  // Try Job Seeker now
+  user = await JobSeeker.findOne({ refreshToken }).select("+refreshToken");
+
+  if (user) {
+    user.refreshToken = null;
+    await user.save();
+
+    // Clear job seeker cookie
+    res.clearCookie("refreshToken", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+    });
+
+    return res
+      .status(200)
+      .json(ApiResponse.success(null, "Job Seeker logged out successfully"));
+  }
+
+  throw new ApiError(400, "Invalid refresh token");
+});
+

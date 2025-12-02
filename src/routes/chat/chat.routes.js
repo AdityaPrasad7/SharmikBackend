@@ -5,6 +5,8 @@ import {
   getConversations,
   markAsRead,
   archiveConversation,
+  getAllMessagesRecruiter,
+  getAllMessagesJobSeeker,
 } from "../../controllers/chat/chat.controller.js";
 import { verifyRecruiterJWT } from "../../middlewares/recruiter/authRecruiter.js";
 import { verifyJobSeekerJWT } from "../../middlewares/jobSeeker/authJobSeeker.js";
@@ -75,6 +77,17 @@ router.get(
   validateGetConversations,
   getConversations
 );
+router.get(
+  "/recruiters/all-messages",
+  verifyRecruiterJWT,
+  getAllMessagesRecruiter
+);
+router.get(
+  "/job-seekers/all-messages",
+  verifyJobSeekerJWT,
+  getAllMessagesJobSeeker
+);
+
 
 router.put(
   "/job-seekers/mark-read",

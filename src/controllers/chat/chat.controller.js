@@ -497,3 +497,111 @@ export const archiveConversation = asyncHandler(async (req, res) => {
   );
 });
 
+export const getAllMessagesRecruiter = asyncHandler(async (req, res) => {
+  const recruiterId = req.recruiter._id;
+
+  // 1. Find all conversations for this recruiter
+  const conversations = await Conversation.find({ recruiter: recruiterId })
+    .populate("job", "jobTitle")
+    .populate("jobSeeker", "name profilePhoto")
+    .lean();
+
+  if (!conversations.length) {
+    return res.status(200).json(
+      ApiResponse.success(
+        { total: 0, conversations: [] },
+        "No conversations found"
+      )
+    );
+  }
+
+  // 2. For each conversation get messages
+  const results = [];
+
+  for (const conv of conversations) {
+    const messages = await Message.find({
+      conversation: conv._id,
+      isDeleted: false,
+    })
+      .populate({
+        path: "senderId",
+        select: "name companyName profilePhoto companyLogo",
+      })
+      .sort({ createdAt: 1 })
+      .lean();
+
+    results.push({
+      conversationId: conv._id,
+      applicationId: conv.application,
+      jobTitle: conv.job?.jobTitle,
+      jobSeeker: conv.jobSeeker,
+      lastMessage: conv.lastMessage,
+      lastMessageAt: conv.lastMessageAt,
+      messages,
+    });
+  }
+
+  return res.status(200).json(
+    ApiResponse.success(
+      {
+        total: results.length,
+        conversations: results,
+      },
+      "All recruiter messages fetched successfully"
+    )
+  );
+});
+
+
+export const getAllMessagesJobSeeker = asyncHandler(async (req, res) => {
+  const jobSeekerId = req.jobSeeker._id;
+
+  const conversations = await Conversation.find({ jobSeeker: jobSeekerId })
+    .populate("job", "jobTitle")
+    .populate("recruiter", "companyName companyLogo")
+    .lean();
+
+  if (!conversations.length) {
+    return res.status(200).json(
+      ApiResponse.success(
+        { total: 0, conversations: [] },
+        "No conversations found"
+      )
+    );
+  }
+
+  const results = [];
+
+  for (const conv of conversations) {
+    const messages = await Message.find({
+      conversation: conv._id,
+      isDeleted: false,
+    })
+      .populate({
+        path: "senderId",
+        select: "name profilePhoto companyName companyLogo",
+      })
+      .sort({ createdAt: 1 })
+      .lean();
+
+    results.push({
+      conversationId: conv._id,
+      applicationId: conv.application,
+      jobTitle: conv.job?.jobTitle,
+      recruiter: conv.recruiter,
+      lastMessage: conv.lastMessage,
+      lastMessageAt: conv.lastMessageAt,
+      messages,
+    });
+  }
+
+  return res.status(200).json(
+    ApiResponse.success(
+      {
+        total: results.length,
+        conversations: results,
+      },
+      "All job seeker messages fetched successfully"
+    )
+  );
+});

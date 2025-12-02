@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { sendOTP, verifyOTP } from "../../controllers/auth/unifiedAuth.controller.js";
+import { sendOTP, verifyOTP , unifiedLogout } from "../../controllers/auth/unifiedAuth.controller.js";
 import { validateRequest } from "../../middlewares/auth/validateAuth.js";
 import {
   sendOTPSchema,
@@ -21,6 +21,8 @@ router.post(
   validateRequest(verifyOTPSchema),
   verifyOTP
 );
+
+router.post("/logout", unifiedLogout);
 
 export default router;
 
