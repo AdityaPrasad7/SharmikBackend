@@ -18,18 +18,22 @@ import { io, onlineUsers } from "../../../server.js";
  * @route POST /api/job-seekers/chat/send-message
  * @requires Authentication
  */
+import { uploadToCloudinary } from "../../utils/cloudinary.js";
+
 export const sendMessage = asyncHandler(async (req, res) => {
-  const { applicationId, content, messageType = "text" } = req.body;
+  const { applicationId, content = "", messageType = "text" } = req.body;
+
   const userType = req.recruiter ? "recruiter" : "job-seeker";
   const userId = req.recruiter?._id || req.jobSeeker?._id;
 
+  // Validate Application
   const application = await Application.findById(applicationId);
   if (!application) throw new ApiError(404, "Application not found");
 
   const job = await RecruiterJob.findById(application.job);
   if (!job) throw new ApiError(404, "Job not found");
 
-  // Authorization
+  // Authorization Check
   if (userType === "recruiter") {
     if (job.recruiter.toString() !== userId.toString())
       throw new ApiError(403, "You are not authorized to chat for this application");
@@ -38,7 +42,7 @@ export const sendMessage = asyncHandler(async (req, res) => {
       throw new ApiError(403, "You are not authorized to chat for this application");
   }
 
-  // Find or create conversation
+  // Find/Create Conversation
   let conversation = await Conversation.findOne({ application: applicationId });
 
   if (!conversation) {
@@ -53,32 +57,41 @@ export const sendMessage = asyncHandler(async (req, res) => {
       initiatedBy: "recruiter",
       status: "active",
     });
-  } else {
-    // Verify access
-    if (userType === "recruiter" && conversation.recruiter.toString() !== userId.toString())
-      throw new ApiError(403, "You are not authorized to access this conversation");
+  }
 
-    if (userType === "job-seeker" && conversation.jobSeeker.toString() !== userId.toString())
-      throw new ApiError(403, "You are not authorized to access this conversation");
+  // -------------------- FILE UPLOADS --------------------
+  let attachments = [];
 
-    if (conversation.status === "archived") {
-      conversation.status = "active";
-      await conversation.save();
+  if (req.files && req.files.length > 0) {
+    for (const file of req.files) {
+      const uploadResult = await uploadToCloudinary(
+        file.buffer,
+        "chat_uploads",
+        "auto"
+      );
+
+      attachments.push({
+        url: uploadResult.secure_url,
+        publicId: uploadResult.public_id,
+        fileType: file.mimetype,
+        size: file.size
+      });
     }
   }
 
-  // Create message
+  // -------------------- CREATE MESSAGE --------------------
   const message = await Message.create({
     conversation: conversation._id,
     sender: userType,
     senderId: userId,
-    content: content.trim(),
-    messageType,
+    content: content,
+    messageType: req.files?.length ? "file" : "text",
+    attachments,
     isRead: false,
   });
 
-  // Update conversation
-  conversation.lastMessage = content.trim().substring(0, 100);
+  // Update Conversation
+  conversation.lastMessage = req.files?.length ? "📎 Attachment" : content.substring(0, 100);
   conversation.lastMessageAt = new Date();
   conversation.lastMessageBy = userType;
 
@@ -105,12 +118,12 @@ export const sendMessage = asyncHandler(async (req, res) => {
     content: message.content,
     messageType: message.messageType,
     isRead: message.isRead,
-    attachments: message.attachments || [],
+    attachments,
     createdAt: message.createdAt,
     updatedAt: message.updatedAt,
   };
 
-  // --------- REAL-TIME SOCKET EMIT (NOW WORKS) --------- //
+  // --------- SOCKET ---------
   const receiverId =
     userType === "recruiter"
       ? application.jobSeeker.toString()
@@ -121,18 +134,14 @@ export const sendMessage = asyncHandler(async (req, res) => {
   if (receiverSocket) {
     io.to(receiverSocket).emit("newMessage", formattedMessage);
     console.log("📨 Real-time message sent to:", receiverId);
-  } else {
-    console.log("⚠ Receiver offline:", receiverId);
   }
 
-  // --------- FINAL API RESPONSE --------- //
   return res.status(201).json(
-    ApiResponse.success(
-      { message: formattedMessage },
-      "Message sent successfully"
-    )
+    ApiResponse.success({ message: formattedMessage }, "Message sent successfully")
   );
 });
+
+
 
 
 /**
@@ -145,7 +154,7 @@ export const sendMessage = asyncHandler(async (req, res) => {
  */
 export const getMessages = asyncHandler(async (req, res) => {
   const { applicationId } = req.params;
-  // Determine user type based on which auth middleware was used
+
   const userType = req.recruiter ? "recruiter" : "job-seeker";
   const userId = req.recruiter?._id || req.jobSeeker?._id;
 
@@ -153,45 +162,96 @@ export const getMessages = asyncHandler(async (req, res) => {
   const limit = parseInt(req.query.limit) || 20;
   const skip = (page - 1) * limit;
 
-  // Validate application exists
+  // Validate application
   const application = await Application.findById(applicationId);
-  if (!application) {
-    throw new ApiError(404, "Application not found");
-  }
+  if (!application) throw new ApiError(404, "Application not found");
 
-  // Find conversation
-  const conversation = await Conversation.findOne({ application: applicationId });
+  // Fetch Job
+  const job = await RecruiterJob.findById(application.job);
+  if (!job) throw new ApiError(404, "Job not found");
 
+  // 🔥 Find conversation first
+  let conversation = await Conversation.findOne({ application: applicationId });
+
+  // -----------------------------------------------------
+  // 🟢 AUTO-CREATE DEFAULT MESSAGE — ONLY FIRST TIME
+  // -----------------------------------------------------
   if (!conversation) {
-    // Return empty messages if conversation doesn't exist
+    // Create conversation (Recruiter is the initiator always)
+    conversation = await Conversation.create({
+      application: applicationId,
+      job: application.job,
+      recruiter: job.recruiter,
+      jobSeeker: application.jobSeeker,
+      initiatedBy: "recruiter",
+      status: "active",
+      lastMessage: "Hello! Thank you for applying. I will review your application shortly.",
+      lastMessageAt: new Date(),
+      lastMessageBy: "recruiter",
+      unreadCountRecruiter: 0,
+      unreadCountJobSeeker: 1, // job seeker has unread message
+    });
+
+    // Create default message
+    const defaultMessage = await Message.create({
+      conversation: conversation._id,
+      sender: "recruiter",
+      senderId: job.recruiter,
+      content: "Hello! Thank you for applying. I will review your application shortly.",
+      messageType: "text",
+      isRead: false,
+    });
+
+    await defaultMessage.populate({
+      path: "senderId",
+      select: "companyName companyLogo",
+    });
+
+    // Return immediately with default message
     return res.status(200).json(
       ApiResponse.success(
         {
-          messages: [],
-          conversation: null,
+          messages: [
+            {
+              _id: defaultMessage._id,
+              conversation: conversation._id,
+              sender: "recruiter",
+              senderId: defaultMessage.senderId,
+              content: defaultMessage.content,
+              messageType: "text",
+              isRead: false,
+              attachments: [],
+              createdAt: defaultMessage.createdAt,
+              updatedAt: defaultMessage.updatedAt,
+            },
+          ],
+          conversation,
           pagination: {
-            currentPage: page,
-            totalPages: 0,
-            totalMessages: 0,
-            limit,
+            currentPage: 1,
+            totalPages: 1,
+            totalMessages: 1,
+            limit: 20,
             hasNextPage: false,
             hasPrevPage: false,
           },
         },
-        "No conversation found"
+        "Default message sent"
       )
     );
   }
 
-  // Verify user has access
-  if (userType === "recruiter" && conversation.recruiter.toString() !== userId.toString()) {
-    throw new ApiError(403, "You are not authorized to access this conversation");
-  }
-  if (userType === "job-seeker" && conversation.jobSeeker.toString() !== userId.toString()) {
-    throw new ApiError(403, "You are not authorized to access this conversation");
-  }
+  // -----------------------------------------------------
+  // 🛑 IF REACH HERE → Conversation already exists
+  // -----------------------------------------------------
 
-  // Mark messages as read for current user
+  // Authorization check
+  if (userType === "recruiter" && conversation.recruiter.toString() !== userId.toString())
+    throw new ApiError(403, "You are not authorized to access this conversation");
+
+  if (userType === "job-seeker" && conversation.jobSeeker.toString() !== userId.toString())
+    throw new ApiError(403, "You are not authorized to access this conversation");
+
+  // Mark messages as read
   await Message.updateMany(
     {
       conversation: conversation._id,
@@ -199,19 +259,13 @@ export const getMessages = asyncHandler(async (req, res) => {
       isRead: false,
     },
     {
-      $set: {
-        isRead: true,
-        readAt: new Date(),
-      },
+      $set: { isRead: true, readAt: new Date() },
     }
   );
 
-  // Update unread count
-  if (userType === "recruiter") {
-    conversation.unreadCountRecruiter = 0;
-  } else {
-    conversation.unreadCountJobSeeker = 0;
-  }
+  // Reset unread count
+  if (userType === "recruiter") conversation.unreadCountRecruiter = 0;
+  else conversation.unreadCountJobSeeker = 0;
   await conversation.save();
 
   // Fetch messages
@@ -228,66 +282,26 @@ export const getMessages = asyncHandler(async (req, res) => {
     .limit(limit)
     .lean();
 
-  // Reverse to show oldest first
   messages.reverse();
 
-  // Get total count
   const totalMessages = await Message.countDocuments({
     conversation: conversation._id,
     isDeleted: false,
   });
+
   const totalPages = Math.ceil(totalMessages / limit);
 
-  // Format messages
-  const formattedMessages = messages.map((msg) => ({
-    _id: msg._id,
-    conversation: msg.conversation,
-    sender: msg.sender,
-    senderId: msg.senderId,
-    content: msg.content,
-    messageType: msg.messageType,
-    isRead: msg.isRead,
-    attachments: msg.attachments || [],
-    createdAt: msg.createdAt,
-    updatedAt: msg.updatedAt,
-  }));
-
-  // Populate conversation details
   await conversation.populate([
-    {
-      path: "job",
-      select: "jobTitle jobDescription",
-    },
-    {
-      path: "recruiter",
-      select: "companyName companyLogo",
-    },
-    {
-      path: "jobSeeker",
-      select: "name profilePhoto",
-    },
+    { path: "job", select: "jobTitle jobDescription" },
+    { path: "recruiter", select: "companyName companyLogo" },
+    { path: "jobSeeker", select: "name profilePhoto" },
   ]);
 
   return res.status(200).json(
     ApiResponse.success(
       {
-        messages: formattedMessages,
-        conversation: {
-          _id: conversation._id,
-          application: conversation.application,
-          job: conversation.job,
-          recruiter: conversation.recruiter,
-          jobSeeker: conversation.jobSeeker,
-          initiatedBy: conversation.initiatedBy,
-          lastMessage: conversation.lastMessage,
-          lastMessageAt: conversation.lastMessageAt,
-          lastMessageBy: conversation.lastMessageBy,
-          unreadCountRecruiter: conversation.unreadCountRecruiter,
-          unreadCountJobSeeker: conversation.unreadCountJobSeeker,
-          status: conversation.status,
-          createdAt: conversation.createdAt,
-          updatedAt: conversation.updatedAt,
-        },
+        messages,
+        conversation,
         pagination: {
           currentPage: page,
           totalPages,
@@ -301,6 +315,8 @@ export const getMessages = asyncHandler(async (req, res) => {
     )
   );
 });
+
+
 
 /**
  * Get Conversations

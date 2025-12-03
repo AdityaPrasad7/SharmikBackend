@@ -21,12 +21,14 @@ const messageSchema = new Schema(
       required: true,
       index: true,
     },
+
+    // OPTIONAL (text not required for file uploads)
     content: {
       type: String,
-      required: true,
       trim: true,
+      default: "",
     },
-    // Message read status
+
     isRead: {
       type: Boolean,
       default: false,
@@ -35,22 +37,22 @@ const messageSchema = new Schema(
     readAt: {
       type: Date,
     },
-    // Message type (text, file, etc.)
+
     messageType: {
       type: String,
       enum: ["text", "file", "image"],
       default: "text",
     },
-    // For file attachments
+
     attachments: [
       {
         url: String,
-        fileName: String,
+        publicId: String,
         fileType: String,
         fileSize: Number,
       },
     ],
-    // Soft delete
+
     isDeleted: {
       type: Boolean,
       default: false,
@@ -59,10 +61,9 @@ const messageSchema = new Schema(
       type: Date,
     },
   },
-  {
-    timestamps: true,
-  }
+  { timestamps: true }
 );
+
 
 // Indexes for efficient queries
 messageSchema.index({ conversation: 1, createdAt: -1 });

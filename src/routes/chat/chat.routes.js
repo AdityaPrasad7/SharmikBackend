@@ -19,6 +19,8 @@ import {
   validateArchiveConversation,
 } from "../../middlewares/chat/validateChat.js";
 
+import upload from "../../utils/multerConfig.js";
+
 const router = express.Router();
 
 // Recruiter Chat Routes
@@ -61,9 +63,10 @@ router.put(
 router.post(
   "/job-seekers/send-message",
   verifyJobSeekerJWT,
-  validateSendMessage,
+  upload.array("attachments", 5),
   sendMessage
 );
+
 
 router.get(
   "/job-seekers/messages/:applicationId",
