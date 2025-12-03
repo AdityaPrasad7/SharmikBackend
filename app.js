@@ -28,32 +28,47 @@ let dbInitialized = false;
 // -------------------- Initialize Database (for serverless compatibility) --------------------
 async function initializeDB() {
   if (!dbInitialized) {
-await connectDB();
-await seedDefaultAdmin();
+  await connectDB();
+
+  // Seed only ONCE in local
+  if (process.env.NODE_ENV !== "production") {
+    await seedDefaultAdmin();
     await seedCategories();
     await seedRoles();
     await seedStatesAndCities();
     await seedJobMeta();
-    dbInitialized = true;
   }
+
+  dbInitialized = true;
+}
+
 }
 
 // -------------------- CORS --------------------
 app.use(
   cors({
     origin: (origin, callback) => {
-      const allowedOrigins =
-        process.env.CORS_ORIGIN?.split(",").map((o) => o.trim()) || [];
+      const allowedOrigins = [
+        "http://localhost:3000",          // React local
+        "http://localhost:5173",          // Vite local
+        "http://localhost:8080",          // Flutter web debug
+        "http://192.168.29.45:3000",      // React on mobile WiFi
+        "http://192.168.29.45:8080",      // Flutter web mobile
+        "http://192.168.29.45:8000",      // API access from phone
+        ...(process.env.CORS_ORIGIN?.split(",").map(o => o.trim()) || [])
+      ];
+
       if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
-        console.warn("Blocked by CORS:", origin);
+        console.warn("🚫 Blocked by CORS:", origin);
         callback(new Error("Not allowed by CORS"));
       }
     },
     credentials: true,
   })
 );
+
 
 // -------------------- Middleware --------------------
 // Note: express.json and express.urlencoded automatically skip multipart/form-data

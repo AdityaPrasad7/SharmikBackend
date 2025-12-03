@@ -6,12 +6,18 @@ const server = http.createServer(app);
 
 export const io = new Server(server, {
   cors: {
-    origin: "*",
+    origin: [
+      "http://localhost:3000",
+      "http://localhost:5173",
+      "http://192.168.29.45:3000",
+      "http://192.168.29.45:8080",
+      "http://192.168.29.45:8000"
+    ],
     methods: ["GET", "POST"],
   },
 });
 
-// Track online users
+
 export const onlineUsers = new Map();
 
 io.on("connection", (socket) => {
@@ -34,6 +40,6 @@ io.on("connection", (socket) => {
 
 const PORT = process.env.PORT || 8000;
 
-server.listen(PORT, () =>
-  console.log(`🚀 Server + WebSocket running http://localhost:${PORT}`)
-);
+server.listen(PORT, () => {
+  console.log(`🚀 Server + WebSocket running on PORT ${PORT}`);
+});
