@@ -1,10 +1,11 @@
-import multer from "multer";
+import multer from 'multer';
+import fs from 'fs-extra';
 
-const storage = multer.memoryStorage();
+// Ensure temp directory exists for uploads
+const TEMP_UPLOAD_DIR = 'tmp/uploads';
+fs.ensureDirSync(TEMP_UPLOAD_DIR);
 
-const upload = multer({
-  storage,
-  limits: { fileSize: 10 * 1024 * 1024, files: 5 },
-});
+// Configure multer with temporary upload directory
+const upload = multer({ dest: TEMP_UPLOAD_DIR });
 
 export default upload;
