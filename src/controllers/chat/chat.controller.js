@@ -20,62 +20,47 @@ import { io, onlineUsers } from "../../../server.js";
  */
 export const sendMessage = asyncHandler(async (req, res) => {
   const { applicationId, content, messageType = "text" } = req.body;
-  // Determine user type based on which auth middleware was used
   const userType = req.recruiter ? "recruiter" : "job-seeker";
   const userId = req.recruiter?._id || req.jobSeeker?._id;
 
-  // Validate application exists
   const application = await Application.findById(applicationId);
+  if (!application) throw new ApiError(404, "Application not found");
 
-  if (!application) {
-    throw new ApiError(404, "Application not found");
-  }
-
-  // Get job details
   const job = await RecruiterJob.findById(application.job);
-  if (!job) {
-    throw new ApiError(404, "Job not found");
-  }
+  if (!job) throw new ApiError(404, "Job not found");
 
-  // Verify user has access to this application
+  // Authorization
   if (userType === "recruiter") {
-    if (job.recruiter.toString() !== userId.toString()) {
+    if (job.recruiter.toString() !== userId.toString())
       throw new ApiError(403, "You are not authorized to chat for this application");
-    }
-  } else if (userType === "job-seeker") {
-    if (application.jobSeeker.toString() !== userId.toString()) {
+  } else {
+    if (application.jobSeeker.toString() !== userId.toString())
       throw new ApiError(403, "You are not authorized to chat for this application");
-    }
   }
 
   // Find or create conversation
   let conversation = await Conversation.findOne({ application: applicationId });
 
   if (!conversation) {
-    // Create new conversation
-    // Only recruiter can initiate conversation
-    if (userType !== "recruiter") {
+    if (userType !== "recruiter")
       throw new ApiError(403, "Only recruiter can initiate a conversation");
-    }
 
     conversation = await Conversation.create({
       application: applicationId,
       job: application.job,
       recruiter: job.recruiter,
       jobSeeker: application.jobSeeker,
-      initiatedBy: userType === "recruiter" ? "recruiter" : "job-seeker",
+      initiatedBy: "recruiter",
       status: "active",
     });
   } else {
-    // Verify conversation belongs to user
-    if (userType === "recruiter" && conversation.recruiter.toString() !== userId.toString()) {
+    // Verify access
+    if (userType === "recruiter" && conversation.recruiter.toString() !== userId.toString())
       throw new ApiError(403, "You are not authorized to access this conversation");
-    }
-    if (userType === "job-seeker" && conversation.jobSeeker.toString() !== userId.toString()) {
-      throw new ApiError(403, "You are not authorized to access this conversation");
-    }
 
-    // Check if conversation is archived
+    if (userType === "job-seeker" && conversation.jobSeeker.toString() !== userId.toString())
+      throw new ApiError(403, "You are not authorized to access this conversation");
+
     if (conversation.status === "archived") {
       conversation.status = "active";
       await conversation.save();
@@ -92,29 +77,26 @@ export const sendMessage = asyncHandler(async (req, res) => {
     isRead: false,
   });
 
-  // Update conversation last message info
-  conversation.lastMessage = content.trim().substring(0, 100); // Store first 100 chars
+  // Update conversation
+  conversation.lastMessage = content.trim().substring(0, 100);
   conversation.lastMessageAt = new Date();
   conversation.lastMessageBy = userType;
 
-  // Update unread counts
   if (userType === "recruiter") {
     conversation.unreadCountJobSeeker += 1;
-    conversation.unreadCountRecruiter = 0; // Sender's unread count is 0
+    conversation.unreadCountRecruiter = 0;
   } else {
     conversation.unreadCountRecruiter += 1;
-    conversation.unreadCountJobSeeker = 0; // Sender's unread count is 0
+    conversation.unreadCountJobSeeker = 0;
   }
 
   await conversation.save();
 
-  // Populate message with sender info
   await message.populate({
     path: "senderId",
     select: userType === "recruiter" ? "companyName companyLogo" : "name profilePhoto",
   });
 
-  // Format response
   const formattedMessage = {
     _id: message._id,
     conversation: message.conversation,
@@ -128,29 +110,30 @@ export const sendMessage = asyncHandler(async (req, res) => {
     updatedAt: message.updatedAt,
   };
 
+  // --------- REAL-TIME SOCKET EMIT (NOW WORKS) --------- //
+  const receiverId =
+    userType === "recruiter"
+      ? application.jobSeeker.toString()
+      : job.recruiter.toString();
+
+  const receiverSocket = onlineUsers.get(receiverId);
+
+  if (receiverSocket) {
+    io.to(receiverSocket).emit("newMessage", formattedMessage);
+    console.log("📨 Real-time message sent to:", receiverId);
+  } else {
+    console.log("⚠ Receiver offline:", receiverId);
+  }
+
+  // --------- FINAL API RESPONSE --------- //
   return res.status(201).json(
     ApiResponse.success(
       { message: formattedMessage },
       "Message sent successfully"
     )
   );
-  // Detect receiver (opposite user)
-const receiverId =
-  userType === "recruiter"
-    ? application.jobSeeker.toString()
-    : job.recruiter.toString();
-
-// Check if receiver is online
-const receiverSocket = onlineUsers.get(receiverId);
-
-if (receiverSocket) {
-  io.to(receiverSocket).emit("newMessage", formattedMessage);
-  console.log("📨 Real-time message sent to:", receiverId);
-} else {
-  console.log("⚠ Receiver offline:", receiverId);
-}
-
 });
+
 
 /**
  * Get Messages
