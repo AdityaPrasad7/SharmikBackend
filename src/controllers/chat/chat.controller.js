@@ -8,6 +8,7 @@ import ApiError from "../../utils/ApiError.js";
 import ApiResponse from "../../utils/ApiResponse.js";
 import { asyncHandler } from "../../utils/asyncHandler.js";
 import mongoose from "mongoose";
+import { io, onlineUsers } from "../../../server.js";
 
 /**
  * Send Message
@@ -133,6 +134,22 @@ export const sendMessage = asyncHandler(async (req, res) => {
       "Message sent successfully"
     )
   );
+  // Detect receiver (opposite user)
+const receiverId =
+  userType === "recruiter"
+    ? application.jobSeeker.toString()
+    : job.recruiter.toString();
+
+// Check if receiver is online
+const receiverSocket = onlineUsers.get(receiverId);
+
+if (receiverSocket) {
+  io.to(receiverSocket).emit("newMessage", formattedMessage);
+  console.log("📨 Real-time message sent to:", receiverId);
+} else {
+  console.log("⚠ Receiver offline:", receiverId);
+}
+
 });
 
 /**

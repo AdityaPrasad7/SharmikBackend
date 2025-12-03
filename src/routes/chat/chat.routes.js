@@ -8,6 +8,7 @@ import {
   getAllMessagesRecruiter,
   getAllMessagesJobSeeker,
 } from "../../controllers/chat/chat.controller.js";
+
 import { verifyRecruiterJWT } from "../../middlewares/recruiter/authRecruiter.js";
 import { verifyJobSeekerJWT } from "../../middlewares/jobSeeker/authJobSeeker.js";
 import {

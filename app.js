@@ -163,17 +163,6 @@ app.use((err, req, res, next) => {
 
 // -------------------- Start Server (only in local development) --------------------
 // Vercel serverless functions don't need app.listen()
-if (process.env.NODE_ENV !== "production" || !process.env.VERCEL) {
-const PORT = process.env.PORT || 8000;
-  // Initialize DB before starting server
-  initializeDB()
-    .then(() => {
-app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
-    })
-    .catch((err) => {
-      console.error("Failed to start server:", err);
-      process.exit(1);
-    });
-}
+
 
 export default app;
