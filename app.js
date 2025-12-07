@@ -9,11 +9,11 @@ import multer from "multer";
 import connectDB from "./src/config/db.js"; // centralized DB connection
 import ApiError from "./src/utils/ApiError.js";
 import routes from "./src/routes/index.js";
-import { seedDefaultAdmin } from "./src/seeders/seedAdmin.js";
-import { seedCategories } from "./src/seeders/seedCategories.js";
-import { seedRoles } from "./src/seeders/seedRoles.js";
-import { seedStatesAndCities } from "./src/seeders/seedStatesAndCities.js";
-import { seedJobMeta } from "./src/seeders/seedJobMeta.js";
+// import { seedDefaultAdmin } from "./src/seeders/seedAdmin.js";
+// import { seedCategories } from "./src/seeders/seedCategories.js";
+// import { seedRoles } from "./src/seeders/seedRoles.js";
+// import { seedStatesAndCities } from "./src/seeders/seedStatesAndCities.js";
+// import { seedJobMeta } from "./src/seeders/seedJobMeta.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -23,26 +23,26 @@ dotenv.config({ path: path.resolve(__dirname, ".env") });
 const app = express();
 
 // Flag to track if DB is initialized (for serverless)
-let dbInitialized = false;
+// let dbInitialized = false;
 
 // -------------------- Initialize Database (for serverless compatibility) --------------------
-async function initializeDB() {
-  if (!dbInitialized) {
-  await connectDB();
+// async function initializeDB() {
+//   if (!dbInitialized) {
+//   await connectDB();
 
-  // Seed only ONCE in local
-  if (process.env.NODE_ENV !== "production") {
-    await seedDefaultAdmin();
-    await seedCategories();
-    await seedRoles();
-    await seedStatesAndCities();
-    await seedJobMeta();
-  }
+//   // Seed only ONCE in local
+//   if (process.env.NODE_ENV !== "production") {
+//     await seedDefaultAdmin();
+//     await seedCategories();
+//     await seedRoles();
+//     await seedStatesAndCities();
+//     await seedJobMeta();
+//   }
 
-  dbInitialized = true;
-}
+//   dbInitialized = true;
+// }
 
-}
+// }
 
 // -------------------- CORS --------------------
 app.use(
@@ -82,12 +82,12 @@ app.use(express.static("public"));
 
 // -------------------- Middleware to ensure DB is initialized (for serverless) --------------------
 // This must be before routes to ensure DB is connected before handling requests
-app.use(async (req, res, next) => {
-  if (!dbInitialized) {
-    await initializeDB();
-  }
-  next();
-});
+// app.use(async (req, res, next) => {
+//   if (!dbInitialized) {
+//     await initializeDB();
+//   }
+//   next();
+// });
 
 // -------------------- Routes --------------------
 app.use("/", routes);

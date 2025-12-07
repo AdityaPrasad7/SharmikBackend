@@ -1,8 +1,13 @@
 import http from "http";
 import { Server } from "socket.io";
 import app from "./app.js";
+import connectDB from "./src/config/db.js"; 
+
+
+await connectDB(); 
 
 const server = http.createServer(app);
+
 
 export const io = new Server(server, {
   cors: {
