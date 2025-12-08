@@ -317,6 +317,93 @@ export const getMessages = asyncHandler(async (req, res) => {
 });
 
 
+// ✅ CHAT HOME FOR RECRUITER
+export const recruiterChatHome = asyncHandler(async (req, res) => {
+  const recruiterId = req.recruiter._id;
+
+  const conversations = await Conversation.find({
+    recruiter: recruiterId,
+    status: "active",
+  })
+    .populate("job", "jobTitle")
+    .populate("jobSeeker", "name profilePhoto phone")
+    .sort({ lastMessageAt: -1 })
+    .lean();
+
+  const chatList = conversations.map((conv) => ({
+    conversationId: conv._id,
+    applicationId: conv.application,
+    jobTitle: conv.job?.jobTitle || "",
+    jobSeeker: {
+      _id: conv.jobSeeker?._id,
+      name: conv.jobSeeker?.name,
+      phone: conv.jobSeeker?.phone,
+      profilePhoto: conv.jobSeeker?.profilePhoto,
+    },
+    lastMessage: conv.lastMessage,
+    lastMessageAt: conv.lastMessageAt,
+    unreadCount: conv.unreadCountRecruiter,
+  }));
+
+  return res.status(200).json(
+    ApiResponse.success(
+      { chats: chatList },
+      "Recruiter chat home loaded successfully"
+    )
+  );
+});
+
+
+// ✅ CHAT HOME FOR JOB SEEKER
+export const jobSeekerChatHome = asyncHandler(async (req, res) => {
+  const jobSeekerId = req.jobSeeker._id;
+
+  const conversations = await Conversation.find({
+    jobSeeker: jobSeekerId,
+    status: "active",
+  })
+    .populate("job", "jobTitle")
+    .populate("recruiter", "companyName companyLogo")
+    .sort({ lastMessageAt: -1 })
+    .lean();
+
+  if (!conversations.length) {
+    return res.status(200).json(
+      ApiResponse.success(
+        { chats: [] },
+        "No chats found"
+      )
+    );
+  }
+
+  const chatList = conversations.map((conv) => ({
+    conversationId: conv._id,
+    applicationId: conv.application,
+    jobTitle: conv.job?.jobTitle || "",
+
+    // ✅ ONLY COMPANY INFO (NOT PERSONAL RECRUITER INFO)
+    recruiter: {
+      companyName: conv.recruiter?.companyName || "",
+      companyLogo: conv.recruiter?.companyLogo || "",
+    },
+
+    // ✅ LAST MESSAGE INFO
+    lastMessage: conv.lastMessage,
+    lastMessageAt: conv.lastMessageAt,
+    unreadCount: conv.unreadCountJobSeeker,
+  }));
+
+  return res.status(200).json(
+    ApiResponse.success(
+      { chats: chatList },
+      "Job seeker chat home loaded successfully"
+    )
+  );
+});
+
+
+
+
 
 /**
  * Get Conversations

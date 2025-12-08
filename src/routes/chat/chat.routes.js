@@ -7,6 +7,8 @@ import {
   archiveConversation,
   getAllMessagesRecruiter,
   getAllMessagesJobSeeker,
+    recruiterChatHome,
+  jobSeekerChatHome,
 } from "../../controllers/chat/chat.controller.js";
 
 import { verifyRecruiterJWT } from "../../middlewares/recruiter/authRecruiter.js";
@@ -107,6 +109,19 @@ router.put(
   archiveConversation
 );
 
+// ✅ Recruiter Chat Home
+router.get(
+  "/recruiters/chat-home",
+  verifyRecruiterJWT,
+  recruiterChatHome
+);
+
+// ✅ Job Seeker Chat Home
+router.get(
+  "/job-seekers/chat-home",
+  verifyJobSeekerJWT,
+  jobSeekerChatHome
+);
 export default router;
 
 
