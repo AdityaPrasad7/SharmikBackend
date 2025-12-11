@@ -19,6 +19,41 @@ import { generateAccessToken, generateRefreshToken, verifyRefreshToken } from ".
  * - Registration: User doesn't exist, category provided
  * - Login: User exists, no category needed
  */
+
+
+function normalizeSkills(input) {
+  let raw = input;
+
+  if (typeof raw === "string") {
+    try {
+      raw = JSON.parse(raw);
+    } catch {
+      raw = raw.replace(/^\[|\]$/g, "").split(",");
+    }
+  }
+
+  let merged = [];
+  let buffer = "";
+
+  for (let part of raw) {
+    part = String(part).trim();
+
+    if (part.includes("(") && !part.includes(")")) {
+      buffer = part;
+    } else if (buffer) {
+      buffer += ", " + part;
+      if (part.includes(")")) {
+        merged.push(buffer.trim());
+        buffer = "";
+      }
+    } else {
+      merged.push(part);
+    }
+  }
+
+  return merged.map(s => s.replace(/^\[|\]$/g, "").trim());
+}
+
 export const sendOTP = asyncHandler(async (req, res) => {
   const { phone, category } = req.body;
 
@@ -182,15 +217,19 @@ export const verifyOTP = asyncHandler(async (req, res) => {
  */
 export const registerNonDegree = asyncHandler(async (req, res) => {
   const { phone, name, email, gender, dateOfBirth, state, city, stateId, cityId, specializationId, selectedSkills } = req.body;
-  console.log("registerNonDegree req.body:", req.body);
 
-  // Cross-table validation: Check if phone exists in Recruiter table
+  // ✅ NORMALIZE selectedSkills (FIX FLUTTER FORM-DATA BUG)
+  let finalSelectedSkills = normalizeSkills(selectedSkills);
+
+
+  finalSelectedSkills = finalSelectedSkills.map(skill =>
+    String(skill).replace(/^\[/, "").replace(/\]$/, "").trim()
+  );
+
+  // Cross-table validation
   const existingRecruiter = await Recruiter.findOne({ phone });
-  if (existingRecruiter) {
-    throw new ApiError(400, "Invalid number");
-  }
+  if (existingRecruiter) throw new ApiError(400, "Invalid number");
 
-  // Find job seeker
   let jobSeeker = await JobSeeker.findOne({ phone });
   if (!jobSeeker || !jobSeeker.phoneVerified) {
     throw new ApiError(400, "Please verify your phone number first");
@@ -200,92 +239,65 @@ export const registerNonDegree = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Invalid category for this registration");
   }
 
-  // Verify specialization exists
   const specialization = await Specialization.findById(specializationId);
-  if (!specialization) {
-    throw new ApiError(404, "Specialization not found");
-  }
+  if (!specialization) throw new ApiError(404, "Specialization not found");
 
-  // Verify skills belong to specialization (case-insensitive, whitespace-insensitive)
   const specializationSkills = specialization.skills || [];
-  
-  // Normalize specialization skills for comparison (trim and lowercase)
-  const normalizedSpecializationSkills = specializationSkills.map(skill => 
+  const normalizedSpecializationSkills = specializationSkills.map(skill =>
     String(skill).trim().toLowerCase()
   );
-  
-  // Check each selected skill against specialization skills
-  const invalidSkills = selectedSkills.filter((skill) => {
-    const normalizedSkill = String(skill).trim().toLowerCase();
-    return !normalizedSpecializationSkills.includes(normalizedSkill);
-  });
-  
+
+  const invalidSkills = finalSelectedSkills.filter(skill =>
+    !normalizedSpecializationSkills.includes(String(skill).trim().toLowerCase())
+  );
+
   if (invalidSkills.length > 0) {
-    // Debug: Log available skills for troubleshooting
-    console.log("Available skills in specialization:", specializationSkills);
-    console.log("Selected skills:", selectedSkills);
-    console.log("Invalid skills:", invalidSkills);
-    
     throw new ApiError(
       400,
-      `Invalid skills: ${invalidSkills.join(", ")}. Skills must belong to the selected specialization. Available skills: ${specializationSkills.join(", ")}`
+      `Invalid skills: ${invalidSkills.join(", ")}. Available skills: ${specializationSkills.join(", ")}`
     );
   }
 
-  // Resolve state and city names from IDs if provided
   let stateName = state;
   let cityName = city;
 
   if (stateId && !stateName) {
     const stateDoc = await State.findById(stateId);
-    if (!stateDoc) {
-      throw new ApiError(404, "State not found");
-    }
+    if (!stateDoc) throw new ApiError(404, "State not found");
     stateName = stateDoc.name;
   }
 
   if (cityId && !cityName) {
     const cityDoc = await City.findById(cityId);
-    if (!cityDoc) {
-      throw new ApiError(404, "City not found");
-    }
+    if (!cityDoc) throw new ApiError(404, "City not found");
     cityName = cityDoc.name;
-    
-    // Verify city belongs to the selected state
+
     if (stateId && cityDoc.stateId.toString() !== stateId) {
       throw new ApiError(400, "City does not belong to the selected state");
     }
   }
 
-  if (!stateName || !cityName) {
-    throw new ApiError(400, "State and city are required");
-  }
+  if (!stateName || !cityName) throw new ApiError(400, "State and city are required");
 
-  // Handle file uploads
   const aadhaarCard = req.files?.aadhaarCard?.[0]
     ? getFileUrl(req.files.aadhaarCard[0])
     : null;
+
   const profilePhoto = req.files?.profilePhoto?.[0]
     ? getFileUrl(req.files.profilePhoto[0])
     : null;
 
-  if (!aadhaarCard) {
-    throw new ApiError(400, "Aadhaar card is required");
-  }
+  if (!aadhaarCard) throw new ApiError(400, "Aadhaar card is required");
+  if (!profilePhoto) throw new ApiError(400, "Profile photo is required");
 
-  if (!profilePhoto) {
-    throw new ApiError(400, "Profile photo is required");
-  }
-
-  // Update job seeker
   jobSeeker.name = name;
   jobSeeker.email = email;
-  jobSeeker.gender = gender ? gender.toLowerCase().trim() : null;
-  jobSeeker.dateOfBirth = dateOfBirth ? new Date(dateOfBirth) : null;
+  jobSeeker.gender = gender?.toLowerCase().trim();
+  jobSeeker.dateOfBirth = new Date(dateOfBirth);
   jobSeeker.state = stateName;
   jobSeeker.city = cityName;
   jobSeeker.specializationId = specializationId;
-  jobSeeker.selectedSkills = selectedSkills; // Only store selected skills (user's known skills)
+  jobSeeker.selectedSkills = finalSelectedSkills;
   jobSeeker.aadhaarCard = aadhaarCard;
   jobSeeker.profilePhoto = profilePhoto;
   jobSeeker.registrationStep = 4;
@@ -294,15 +306,12 @@ export const registerNonDegree = asyncHandler(async (req, res) => {
 
   await jobSeeker.save();
 
-  return res
-    .status(200)
-    .json(
-      ApiResponse.success(
-        { jobSeeker },
-        "Registration completed successfully"
-      )
-    );
+  return res.status(200).json(
+    ApiResponse.success({ jobSeeker }, "Registration completed successfully")
+  );
 });
+
+
 
 /**
  * Step 1 Registration (Diploma/ITI Holder) - Upload Aadhaar and Profile Photo
@@ -373,6 +382,14 @@ export const step2Registration = asyncHandler(async (req, res) => {
   const { phone, jobSeekerId, specializationId, selectedSkills, questionAnswers, role } =
     req.body;
 
+    let finalSelectedSkills = normalizeSkills(selectedSkills);
+
+
+  finalSelectedSkills = finalSelectedSkills.map((skill) =>
+    String(skill).trim()
+  );
+
+
   // Find job seeker - prefer jobSeekerId over phone
   let jobSeeker;
   if (jobSeekerId) {
@@ -406,11 +423,11 @@ export const step2Registration = asyncHandler(async (req, res) => {
   );
   
   // Check each selected skill against specialization skills
-  const invalidSkills = selectedSkills.filter((skill) => {
-    const normalizedSkill = String(skill).trim().toLowerCase();
-    return !normalizedSpecializationSkills.includes(normalizedSkill);
-  });
-  
+ const invalidSkills = finalSelectedSkills.filter((skill) => {
+  const normalizedSkill = String(skill).trim().toLowerCase();
+  return !normalizedSpecializationSkills.includes(normalizedSkill);
+});
+
   if (invalidSkills.length > 0) {
     // Debug: Log available skills for troubleshooting
     console.log("Available skills in specialization:", specializationSkills);
@@ -504,9 +521,11 @@ export const step2Registration = asyncHandler(async (req, res) => {
   });
 
   // Update job seeker
-  jobSeeker.specializationId = specializationId;
-  jobSeeker.selectedSkills = selectedSkills;
-  jobSeeker.skills = selectedSkills;
+
+jobSeeker.specializationId = specializationId;
+jobSeeker.selectedSkills = finalSelectedSkills;   // ✅ CORRECT
+jobSeeker.skills = finalSelectedSkills;           // ✅ CORRECT
+
   jobSeeker.questionAnswers = processedAnswers;
   jobSeeker.role = role || "Worker";
   jobSeeker.registrationStep = 3;
@@ -1116,19 +1135,13 @@ export const updateJobSeekerProfile = asyncHandler(async (req, res) => {
     throw new ApiError(404, "Job seeker profile not found");
   }
 
-  // Update personal information
-  if (name !== undefined) {
-    profile.name = name?.trim() || null;
-  }
-  if (email !== undefined) {
-    profile.email = email?.trim().toLowerCase() || null;
-  }
-  if (gender !== undefined) {
-    profile.gender = gender?.trim().toLowerCase() || null;
-  }
-  if (dateOfBirth !== undefined) {
+  // ✅ BASIC UPDATES
+  if (name !== undefined) profile.name = name?.trim() || null;
+  if (email !== undefined) profile.email = email?.trim().toLowerCase() || null;
+  if (gender !== undefined) profile.gender = gender?.trim().toLowerCase() || null;
+  if (dateOfBirth !== undefined)
     profile.dateOfBirth = dateOfBirth ? new Date(dateOfBirth) : null;
-  }
+
 
   // Update location (support both names and IDs)
   if (stateId || cityId) {
@@ -1172,34 +1185,28 @@ export const updateJobSeekerProfile = asyncHandler(async (req, res) => {
 
   // Update skills if provided
   if (selectedSkills !== undefined) {
-    if (Array.isArray(selectedSkills) && selectedSkills.length > 0) {
-      // Validate skills against specialization
-      const currentSpecializationId = specializationId || profile.specializationId;
-      if (currentSpecializationId) {
-        const specialization = await Specialization.findById(currentSpecializationId);
-        if (specialization) {
-          const specializationSkills = specialization.skills || [];
-          const normalizedSpecializationSkills = specializationSkills.map(skill => 
-            String(skill).trim().toLowerCase()
-          );
-          
-          const invalidSkills = selectedSkills.filter((skill) => {
-            const normalizedSkill = String(skill).trim().toLowerCase();
-            return !normalizedSpecializationSkills.includes(normalizedSkill);
-          });
-          
-          if (invalidSkills.length > 0) {
-            throw new ApiError(
-              400,
-              `Invalid skills: ${invalidSkills.join(", ")}. Skills must belong to the selected specialization.`
-            );
-          }
-        }
+    let finalSelectedSkills = selectedSkills;
+
+    if (typeof selectedSkills === "string") {
+      try {
+        finalSelectedSkills = JSON.parse(selectedSkills);
+      } catch (err) {
+        finalSelectedSkills = selectedSkills
+          .replace(/^\[|\]$/g, "")
+          .split(",")
+          .map((s) => s.trim());
       }
-      profile.selectedSkills = selectedSkills.map(skill => String(skill).trim()).filter(skill => skill.length > 0);
+    }
+
+    finalSelectedSkills = finalSelectedSkills.map((skill) =>
+      String(skill).trim()
+    );
+
+    if (finalSelectedSkills.length > 0) {
+      profile.selectedSkills = finalSelectedSkills;
     } else {
       profile.selectedSkills = [];
-    }
+    } 
   }
 
   // Update about me section
