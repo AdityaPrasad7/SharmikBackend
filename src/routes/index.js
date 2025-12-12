@@ -8,6 +8,10 @@ import questionSetRoutes from "./admin/questionSet/questionSet.routes.js";
 import coinPricingRoutes from "./admin/coinPricing/coinPricing.routes.js";
 import publicCoinPricingRoutes from "./coin/coinPricing.routes.js";
 import categoryRoutes from "./admin/category/category.routes.js";
+import adminDashboardRoutes from "./admin/dashboard/dashboard.routes.js";
+import adminJobSeekerRoutes from "./admin/jobSeeker/jobSeeker.routes.js";
+import adminRecruiterRoutes from "./admin/recruiter/recruiter.routes.js";
+import adminEmailRoutes from "./admin/email/email.routes.js";
 import jobSeekerRoutes from "./jobSeeker/jobSeeker.routes.js";
 import recruiterRoutes from "./recruiter/recruiter.routes.js";
 import roleRoutes from "./role/role.routes.js";
@@ -35,6 +39,14 @@ router.use("/api/coin-pricing", coinPricingRoutes);
 // Public coin pricing routes (no authentication required)
 router.use("/api/public/coin-pricing", publicCoinPricingRoutes);
 router.use("/api/categories", categoryRoutes);
+// Admin dashboard routes
+router.use("/api/admin/dashboard", adminDashboardRoutes);
+// Admin job seeker insights routes
+router.use("/api/admin/job-seekers", adminJobSeekerRoutes);
+// Admin recruiter performance routes
+router.use("/api/admin/recruiters", adminRecruiterRoutes);
+// Admin email marketing routes
+router.use("/api/admin/email", adminEmailRoutes);
 router.use("/api/job-seekers", jobSeekerRoutes);
 router.use("/api/recruiters", recruiterRoutes);
 router.use("/api/roles", roleRoutes);

@@ -10,17 +10,24 @@ const messageSchema = new Schema(
       required: true,
       index: true,
     },
-    sender: {
+    senderType: {
       type: String,
       enum: ["recruiter", "job-seeker"],
       required: true,
-      index: true,
     },
+
+    senderModel: {
+      type: String,
+      required: true,
+      enum: ["Recruiter", "JobSeeker"],
+    },
+
     senderId: {
       type: Schema.Types.ObjectId,
       required: true,
-      index: true,
+      refPath: "senderModel",
     },
+
 
     // OPTIONAL (text not required for file uploads)
     content: {

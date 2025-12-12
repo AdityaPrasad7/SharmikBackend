@@ -59,7 +59,7 @@ export const sendMessage = asyncHandler(async (req, res) => {
     });
   }
 
-  // -------------------- FILE UPLOADS --------------------
+  // FILE UPLOADS
   let attachments = [];
 
   if (req.files && req.files.length > 0) {
@@ -74,24 +74,35 @@ export const sendMessage = asyncHandler(async (req, res) => {
         url: uploadResult.secure_url,
         publicId: uploadResult.public_id,
         fileType: file.mimetype,
-        size: file.size
+        fileSize: file.size,
       });
     }
   }
 
-  // -------------------- CREATE MESSAGE --------------------
+  // Determine senderModel for refPath
+  const senderModel = userType === "recruiter" ? "Recruiter" : "JobSeeker";
+
+  // CREATE MESSAGE (RefPath enabled)
   const message = await Message.create({
     conversation: conversation._id,
-    sender: userType,
+    senderType: userType,
+    senderModel: senderModel,
     senderId: userId,
-    content: content,
+    content,
     messageType: req.files?.length ? "file" : "text",
     attachments,
     isRead: false,
   });
 
-  // Update Conversation
-  conversation.lastMessage = req.files?.length ? "📎 Attachment" : content.substring(0, 100);
+  // POPULATE SENDER DETAILS
+  await message.populate({
+    path: "senderId",
+    select: "name profilePhoto companyName companyLogo",
+  });
+
+  // UPDATE conversation metadata
+  conversation.lastMessage =
+    req.files?.length ? "📎 Attachment" : content.substring(0, 100);
   conversation.lastMessageAt = new Date();
   conversation.lastMessageBy = userType;
 
@@ -105,16 +116,13 @@ export const sendMessage = asyncHandler(async (req, res) => {
 
   await conversation.save();
 
-  await message.populate({
-    path: "senderId",
-    select: userType === "recruiter" ? "companyName companyLogo" : "name profilePhoto",
-  });
-
+  // FORMAT RESPONSE MESSAGE
   const formattedMessage = {
     _id: message._id,
+    applicationId: applicationId, // Include applicationId for Flutter filtering
     conversation: message.conversation,
-    sender: message.sender,
-    senderId: message.senderId,
+    sender: message.senderType,
+    senderId: message.senderId, // NOW FULL DETAILS
     content: message.content,
     messageType: message.messageType,
     isRead: message.isRead,
@@ -123,22 +131,34 @@ export const sendMessage = asyncHandler(async (req, res) => {
     updatedAt: message.updatedAt,
   };
 
-  // --------- SOCKET ---------
+  // SEND VIA SOCKET
   const receiverId =
     userType === "recruiter"
       ? application.jobSeeker.toString()
       : job.recruiter.toString();
 
-  const receiverSocket = onlineUsers.get(receiverId);
+  console.log("\n📤 ========== SOCKET EMISSION ==========");
+  console.log("   Sender:", userId.toString(), `(${userType})`);
+  console.log("   Receiver:", receiverId);
+  console.log("   Online users:", Array.from(onlineUsers.keys()));
 
-  if (receiverSocket) {
-    io.to(receiverSocket).emit("newMessage", formattedMessage);
-    console.log("📨 Real-time message sent to:", receiverId);
+  const receiverInfo = onlineUsers.get(receiverId);
+
+  if (receiverInfo) {
+    // Support both old format (string) and new format (object)
+    const receiverSocketId = typeof receiverInfo === "string" ? receiverInfo : receiverInfo.socketId;
+
+    io.to(receiverSocketId).emit("newMessage", formattedMessage);
+    console.log("   ✅ Message emitted to socket:", receiverSocketId);
+  } else {
+    console.log("   ❌ Receiver is OFFLINE, message not sent via socket");
+    console.log("   (Message is saved to DB, will be fetched on next load)");
   }
+  console.log("========================================\n");
 
-  return res.status(201).json(
-    ApiResponse.success({ message: formattedMessage }, "Message sent successfully")
-  );
+  return res
+    .status(201)
+    .json(ApiResponse.success({ message: formattedMessage }, "Message sent successfully"));
 });
 
 
@@ -162,22 +182,20 @@ export const getMessages = asyncHandler(async (req, res) => {
   const limit = parseInt(req.query.limit) || 20;
   const skip = (page - 1) * limit;
 
-  // Validate application
+  // Validate Application
   const application = await Application.findById(applicationId);
   if (!application) throw new ApiError(404, "Application not found");
 
-  // Fetch Job
   const job = await RecruiterJob.findById(application.job);
   if (!job) throw new ApiError(404, "Job not found");
 
-  // 🔥 Find conversation first
+  // Find Conversation
   let conversation = await Conversation.findOne({ application: applicationId });
 
   // -----------------------------------------------------
-  // 🟢 AUTO-CREATE DEFAULT MESSAGE — ONLY FIRST TIME
+  // AUTO CREATE DEFAULT CONVERSATION + FIRST MESSAGE
   // -----------------------------------------------------
   if (!conversation) {
-    // Create conversation (Recruiter is the initiator always)
     conversation = await Conversation.create({
       application: applicationId,
       job: application.job,
@@ -189,13 +207,13 @@ export const getMessages = asyncHandler(async (req, res) => {
       lastMessageAt: new Date(),
       lastMessageBy: "recruiter",
       unreadCountRecruiter: 0,
-      unreadCountJobSeeker: 1, // job seeker has unread message
+      unreadCountJobSeeker: 1,
     });
 
-    // Create default message
     const defaultMessage = await Message.create({
       conversation: conversation._id,
-      sender: "recruiter",
+      senderType: "recruiter",
+      senderModel: "Recruiter",
       senderId: job.recruiter,
       content: "Hello! Thank you for applying. I will review your application shortly.",
       messageType: "text",
@@ -207,7 +225,6 @@ export const getMessages = asyncHandler(async (req, res) => {
       select: "companyName companyLogo",
     });
 
-    // Return immediately with default message
     return res.status(200).json(
       ApiResponse.success(
         {
@@ -241,21 +258,19 @@ export const getMessages = asyncHandler(async (req, res) => {
   }
 
   // -----------------------------------------------------
-  // 🛑 IF REACH HERE → Conversation already exists
+  // AUTHORIZATION
   // -----------------------------------------------------
-
-  // Authorization check
   if (userType === "recruiter" && conversation.recruiter.toString() !== userId.toString())
     throw new ApiError(403, "You are not authorized to access this conversation");
 
   if (userType === "job-seeker" && conversation.jobSeeker.toString() !== userId.toString())
     throw new ApiError(403, "You are not authorized to access this conversation");
 
-  // Mark messages as read
+  // Mark as read
   await Message.updateMany(
     {
       conversation: conversation._id,
-      sender: { $ne: userType },
+      senderType: { $ne: userType },
       isRead: false,
     },
     {
@@ -268,14 +283,16 @@ export const getMessages = asyncHandler(async (req, res) => {
   else conversation.unreadCountJobSeeker = 0;
   await conversation.save();
 
-  // Fetch messages
+  // -----------------------------------------------------
+  // FETCH MESSAGES with refPath populate
+  // -----------------------------------------------------
   const messages = await Message.find({
     conversation: conversation._id,
     isDeleted: false,
   })
     .populate({
       path: "senderId",
-      select: userType === "recruiter" ? "companyName companyLogo" : "name profilePhoto",
+      select: "name profilePhoto companyName companyLogo",
     })
     .sort({ createdAt: -1 })
     .skip(skip)
@@ -284,6 +301,7 @@ export const getMessages = asyncHandler(async (req, res) => {
 
   messages.reverse();
 
+  // Pagination info
   const totalMessages = await Message.countDocuments({
     conversation: conversation._id,
     isDeleted: false,
@@ -291,6 +309,7 @@ export const getMessages = asyncHandler(async (req, res) => {
 
   const totalPages = Math.ceil(totalMessages / limit);
 
+  // Populate conversation metadata
   await conversation.populate([
     { path: "job", select: "jobTitle jobDescription" },
     { path: "recruiter", select: "companyName companyLogo" },

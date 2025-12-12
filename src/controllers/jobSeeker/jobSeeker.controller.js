@@ -32,11 +32,17 @@ function normalizeSkills(input) {
     }
   }
 
+  // If it's not an array at this point, wrap it
+  if (!Array.isArray(raw)) {
+    raw = [raw];
+  }
+
   let merged = [];
   let buffer = "";
 
   for (let part of raw) {
-    part = String(part).trim();
+    // Clean brackets from each part BEFORE processing
+    part = String(part).replace(/^\[+/, "").replace(/\]+$/, "").trim();
 
     if (part.includes("(") && !part.includes(")")) {
       buffer = part;
@@ -46,12 +52,13 @@ function normalizeSkills(input) {
         merged.push(buffer.trim());
         buffer = "";
       }
-    } else {
+    } else if (part) {  // Only add non-empty parts
       merged.push(part);
     }
   }
 
-  return merged.map(s => s.replace(/^\[|\]$/g, "").trim());
+  // Final cleanup - remove any remaining brackets and trim
+  return merged.map(s => s.replace(/^\[+/, "").replace(/\]+$/, "").trim()).filter(s => s.length > 0);
 }
 
 export const sendOTP = asyncHandler(async (req, res) => {
@@ -65,10 +72,10 @@ export const sendOTP = asyncHandler(async (req, res) => {
 
   // Check if job seeker already exists
   const existingJobSeeker = await JobSeeker.findOne({ phone });
-  
+
   // Determine purpose: "login" if user exists, "registration" if new user
   const purpose = existingJobSeeker ? "login" : "registration";
-  
+
   // For registration, category is optional (can be sent in verify-otp)
   // For login, category is not needed
   if (existingJobSeeker && category) {
@@ -87,8 +94,8 @@ export const sendOTP = asyncHandler(async (req, res) => {
   // 1. Development mode, OR
   // 2. RETURN_OTP_IN_RESPONSE env variable is set to true, OR
   // 3. OTP is "1234" (testing mode)
-  const shouldReturnOTP = 
-    process.env.NODE_ENV === "development" || 
+  const shouldReturnOTP =
+    process.env.NODE_ENV === "development" ||
     process.env.RETURN_OTP_IN_RESPONSE === "true" ||
     otp === "1234";
 
@@ -96,7 +103,7 @@ export const sendOTP = asyncHandler(async (req, res) => {
     .status(200)
     .json(
       ApiResponse.success(
-        { 
+        {
           otp: shouldReturnOTP ? otp : undefined,
           isExistingUser: !!existingJobSeeker // Indicate if user exists (for frontend logic)
         },
@@ -129,13 +136,13 @@ export const verifyOTP = asyncHandler(async (req, res) => {
   if (!isValid) {
     throw new ApiError(400, "Invalid or expired OTP");
   }
-  
+
   if (!jobSeeker) {
     // New user - Registration flow: category is REQUIRED
     if (!category) {
       throw new ApiError(400, "Category is required for new user registration");
     }
-    
+
     jobSeeker = await JobSeeker.create({
       phone,
       phoneVerified: true,
@@ -147,7 +154,7 @@ export const verifyOTP = asyncHandler(async (req, res) => {
     // If category provided, update it (user might be changing category)
     // If not provided, keep existing category
     jobSeeker.phoneVerified = true;
-    
+
     if (category) {
       jobSeeker.category = category;
       // Reset registration step if category changed
@@ -155,7 +162,7 @@ export const verifyOTP = asyncHandler(async (req, res) => {
         jobSeeker.registrationStep = 1;
       }
     }
-    
+
     await jobSeeker.save();
   }
 
@@ -247,14 +254,33 @@ export const registerNonDegree = asyncHandler(async (req, res) => {
     String(skill).trim().toLowerCase()
   );
 
+  // Debug logging for skill validation
+  console.log("=== Non-Degree Skill Validation Debug ===");
+  console.log("Raw selectedSkills from request:", selectedSkills);
+  console.log("Normalized finalSelectedSkills:", finalSelectedSkills);
+  console.log("Specialization skills (raw):", specializationSkills);
+  console.log("Normalized specialization skills:", normalizedSpecializationSkills);
+
+  // Log each skill comparison
+  finalSelectedSkills.forEach(skill => {
+    const normalizedSkill = String(skill).trim().toLowerCase();
+    const isValid = normalizedSpecializationSkills.includes(normalizedSkill);
+    console.log(`Skill "${skill}" -> normalized: "${normalizedSkill}" -> valid: ${isValid}`);
+  });
+
   const invalidSkills = finalSelectedSkills.filter(skill =>
     !normalizedSpecializationSkills.includes(String(skill).trim().toLowerCase())
   );
 
   if (invalidSkills.length > 0) {
+    // Debug: Log available skills for troubleshooting
+    console.log("Available skills in specialization:", specializationSkills);
+    console.log("Selected skills:", finalSelectedSkills);
+    console.log("Invalid skills:", invalidSkills);
+
     throw new ApiError(
       400,
-      `Invalid skills: ${invalidSkills.join(", ")}. Available skills: ${specializationSkills.join(", ")}`
+      `Invalid skills: [${invalidSkills.join(", ")}]. Skills must belong to the selected specialization. Available skills: ${specializationSkills.join(", ")}`
     );
   }
 
@@ -382,7 +408,7 @@ export const step2Registration = asyncHandler(async (req, res) => {
   const { phone, jobSeekerId, specializationId, selectedSkills, questionAnswers, role } =
     req.body;
 
-    let finalSelectedSkills = normalizeSkills(selectedSkills);
+  let finalSelectedSkills = normalizeSkills(selectedSkills);
 
 
   finalSelectedSkills = finalSelectedSkills.map((skill) =>
@@ -416,24 +442,24 @@ export const step2Registration = asyncHandler(async (req, res) => {
 
   // Verify skills belong to specialization (case-insensitive, whitespace-insensitive)
   const specializationSkills = specialization.skills || [];
-  
+
   // Normalize specialization skills for comparison (trim and lowercase)
-  const normalizedSpecializationSkills = specializationSkills.map(skill => 
+  const normalizedSpecializationSkills = specializationSkills.map(skill =>
     String(skill).trim().toLowerCase()
   );
-  
+
   // Check each selected skill against specialization skills
- const invalidSkills = finalSelectedSkills.filter((skill) => {
-  const normalizedSkill = String(skill).trim().toLowerCase();
-  return !normalizedSpecializationSkills.includes(normalizedSkill);
-});
+  const invalidSkills = finalSelectedSkills.filter((skill) => {
+    const normalizedSkill = String(skill).trim().toLowerCase();
+    return !normalizedSpecializationSkills.includes(normalizedSkill);
+  });
 
   if (invalidSkills.length > 0) {
     // Debug: Log available skills for troubleshooting
     console.log("Available skills in specialization:", specializationSkills);
     console.log("Selected skills:", selectedSkills);
     console.log("Invalid skills:", invalidSkills);
-    
+
     throw new ApiError(
       400,
       `Invalid skills: ${invalidSkills.join(", ")}. Skills must belong to the selected specialization. Available skills: ${specializationSkills.join(", ")}`
@@ -476,7 +502,7 @@ export const step2Registration = asyncHandler(async (req, res) => {
     // Find question by questionId (e.g., "q1", "q2", etc.)
     // questionId format is typically "q1", "q2", etc. from the API response
     let question;
-    
+
     if (answer.questionId) {
       // Extract number from questionId (e.g., "q1" -> 1, "q2" -> 2)
       const questionIndexMatch = answer.questionId.match(/q(\d+)/i);
@@ -487,29 +513,29 @@ export const step2Registration = asyncHandler(async (req, res) => {
         }
       }
     }
-    
+
     // Fallback: Try to find by questionText (for backward compatibility)
     if (!question && answer.questionText) {
       question = questionSetQuestions.find(
         (q) => q.text.trim().toLowerCase() === answer.questionText.trim().toLowerCase()
       );
     }
-    
+
     // Fallback: Use index if questionId format doesn't match
     if (!question && index < questionSetQuestions.length) {
       question = questionSetQuestions[index];
     }
-    
+
     if (!question) {
       throw new ApiError(
-        400, 
+        400,
         `Question not found for questionId: ${answer.questionId || `at index ${index}`}`
       );
     }
 
     // Find the correct option
     const correctOption = question.options.find((opt) => opt.isCorrect);
-    const isCorrect = correctOption && 
+    const isCorrect = correctOption &&
       correctOption.text.trim().toLowerCase() === answer.selectedOption?.trim().toLowerCase();
 
     return {
@@ -522,9 +548,9 @@ export const step2Registration = asyncHandler(async (req, res) => {
 
   // Update job seeker
 
-jobSeeker.specializationId = specializationId;
-jobSeeker.selectedSkills = finalSelectedSkills;   // ✅ CORRECT
-jobSeeker.skills = finalSelectedSkills;           // ✅ CORRECT
+  jobSeeker.specializationId = specializationId;
+  jobSeeker.selectedSkills = finalSelectedSkills;   // ✅ CORRECT
+  jobSeeker.skills = finalSelectedSkills;           // ✅ CORRECT
 
   jobSeeker.questionAnswers = processedAnswers;
   jobSeeker.role = role || "Worker";
@@ -587,7 +613,7 @@ export const step3Registration = asyncHandler(async (req, res) => {
       throw new ApiError(404, "City not found");
     }
     cityName = cityDoc.name;
-    
+
     // Verify city belongs to the selected state
     if (stateId && cityDoc.stateId.toString() !== stateId) {
       throw new ApiError(400, "City does not belong to the selected state");
@@ -607,12 +633,12 @@ export const step3Registration = asyncHandler(async (req, res) => {
   if (percentageOrGrade) {
     finalEducation.percentageOrGrade = percentageOrGrade;
   }
-  
+
   // Validate required fields
   if (!finalEducation.city || !finalEducation.state || !finalEducation.yearOfPassing) {
     throw new ApiError(400, "State, city, and year of passing are required");
   }
-  
+
   if (!finalEducation.percentageOrGrade) {
     throw new ApiError(400, "Percentage or Grade is required");
   }
@@ -751,10 +777,10 @@ export const getSpecializationSkills = asyncHandler(async (req, res) => {
   // Format questions with auto-generated questionId for frontend
   const formattedQuestions = questionSet
     ? (questionSet.questions || []).map((question, index) => ({
-        questionId: `q${index + 1}`, // Auto-generated questionId: "q1", "q2", "q3", etc.
-        text: question.text,
-        options: question.options || [],
-      }))
+      questionId: `q${index + 1}`, // Auto-generated questionId: "q1", "q2", "q3", etc.
+      text: question.text,
+      options: question.options || [],
+    }))
     : [];
 
   return res
@@ -770,11 +796,11 @@ export const getSpecializationSkills = asyncHandler(async (req, res) => {
           },
           questionSet: questionSet
             ? {
-                _id: questionSet._id,
-                name: questionSet.name,
-                questions: formattedQuestions, // Questions with auto-generated questionId
-                totalQuestions: questionSet.totalQuestions || 0,
-              }
+              _id: questionSet._id,
+              name: questionSet.name,
+              questions: formattedQuestions, // Questions with auto-generated questionId
+              totalQuestions: questionSet.totalQuestions || 0,
+            }
             : null,
         },
         "Specialization, skills, and questions fetched successfully"
@@ -898,8 +924,8 @@ export const getJobSeekerByPhone = asyncHandler(async (req, res) => {
  */
 export const refreshAccessToken = asyncHandler(async (req, res) => {
   // 1. Extract refresh token from request
-  const incomingRefreshToken = 
-    req.body.refreshToken || 
+  const incomingRefreshToken =
+    req.body.refreshToken ||
     req.cookies?.refreshToken;
 
   if (!incomingRefreshToken) {
@@ -996,14 +1022,14 @@ export const refreshAccessToken = asyncHandler(async (req, res) => {
  */
 export const logoutJobSeeker = asyncHandler(async (req, res) => {
   // Extract refresh token
-  const refreshToken = 
-    req.body.refreshToken || 
+  const refreshToken =
+    req.body.refreshToken ||
     req.cookies?.refreshToken;
 
   if (refreshToken) {
     // Find job seeker by refresh token and remove it
     const jobSeeker = await JobSeeker.findOne({ refreshToken }).select("+refreshToken");
-    
+
     if (jobSeeker) {
       jobSeeker.refreshToken = null;
       await jobSeeker.save({ select: "+refreshToken" });
@@ -1065,10 +1091,10 @@ export const getJobSeekerProfile = asyncHandler(async (req, res) => {
     specializationId: profile.specializationId?._id || null,
     specialization: profile.specializationId
       ? {
-          _id: profile.specializationId._id,
-          name: profile.specializationId.name,
-          description: profile.specializationId.description,
-        }
+        _id: profile.specializationId._id,
+        name: profile.specializationId.name,
+        description: profile.specializationId.description,
+      }
       : null,
     skills: profile.skills || [],
     selectedSkills: profile.selectedSkills || [],
@@ -1158,7 +1184,7 @@ export const updateJobSeekerProfile = asyncHandler(async (req, res) => {
         throw new ApiError(404, "City not found");
       }
       profile.city = cityDoc.name;
-      
+
       // Verify city belongs to state if both are provided
       if (stateId && cityDoc.stateId.toString() !== stateId) {
         throw new ApiError(400, "City does not belong to the selected state");
@@ -1206,7 +1232,7 @@ export const updateJobSeekerProfile = asyncHandler(async (req, res) => {
       profile.selectedSkills = finalSelectedSkills;
     } else {
       profile.selectedSkills = [];
-    } 
+    }
   }
 
   // Update about me section
@@ -1253,10 +1279,10 @@ export const updateJobSeekerProfile = asyncHandler(async (req, res) => {
     specializationId: profile.specializationId?._id || null,
     specialization: profile.specializationId
       ? {
-          _id: profile.specializationId._id,
-          name: profile.specializationId.name,
-          description: profile.specializationId.description,
-        }
+        _id: profile.specializationId._id,
+        name: profile.specializationId.name,
+        description: profile.specializationId.description,
+      }
       : null,
     skills: profile.skills || [],
     selectedSkills: profile.selectedSkills || [],
