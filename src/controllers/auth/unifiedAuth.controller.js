@@ -73,10 +73,14 @@ export const sendOTP = asyncHandler(async (req, res) => {
 /**
  * Unified Verify OTP - Automatically detects user type and handles verification
  * Returns appropriate tokens and user data based on user type
+ * Optionally registers FCM token if provided
  */
 export const verifyOTP = asyncHandler(async (req, res) => {
-  const { phone, otp, category } = req.body;
-
+  const { phone, otp, category, fcmToken } = req.body;
+  console.log("phone", phone);
+  console.log("otp", otp);
+  console.log("category", category);
+  console.log("fcmToken", fcmToken);
   // Check both tables to determine user type
   let existingJobSeeker = await JobSeeker.findOne({ phone });
   let existingRecruiter = await Recruiter.findOne({ phone });
@@ -117,11 +121,11 @@ export const verifyOTP = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Invalid or expired OTP");
   }
 
-  // Handle verification based on user type
+  // Handle verification based on user type (pass fcmToken)
   if (userType === "job-seeker") {
-    return handleJobSeekerVerification(req, res, existingJobSeeker, phone, category, purpose);
+    return handleJobSeekerVerification(req, res, existingJobSeeker, phone, category, purpose, fcmToken);
   } else if (userType === "recruiter") {
-    return handleRecruiterVerification(req, res, existingRecruiter, phone, purpose);
+    return handleRecruiterVerification(req, res, existingRecruiter, phone, purpose, fcmToken);
   } else {
     throw new ApiError(400, "Unable to determine user type. Please provide category for job seeker registration.");
   }
@@ -130,7 +134,7 @@ export const verifyOTP = asyncHandler(async (req, res) => {
 /**
  * Handle Job Seeker OTP Verification
  */
-const handleJobSeekerVerification = async (req, res, jobSeeker, phone, category, purpose) => {
+const handleJobSeekerVerification = async (req, res, jobSeeker, phone, category, purpose, fcmToken) => {
   if (!jobSeeker) {
     // New job seeker - Registration flow: category is REQUIRED
     if (!category) {
@@ -178,6 +182,19 @@ const handleJobSeekerVerification = async (req, res, jobSeeker, phone, category,
   jobSeeker.refreshToken = refreshToken;
   await jobSeeker.save({ select: "+refreshToken" });
 
+  // Register FCM token if provided - add to user's fcmTokens array
+  let updatedFcmTokens = jobSeeker.fcmTokens || [];
+  if (fcmToken) {
+    console.log("📱 Adding FCM token to user:", fcmToken);
+    const updatedUser = await JobSeeker.findByIdAndUpdate(
+      jobSeeker._id,
+      { $addToSet: { fcmTokens: fcmToken } },
+      { new: true }
+    );
+    updatedFcmTokens = updatedUser.fcmTokens;
+    console.log("📱 FCM token added to user's fcmTokens array");
+  }
+
   // Prepare safe job seeker data
   const safeJobSeeker = {
     _id: jobSeeker._id,
@@ -188,6 +205,7 @@ const handleJobSeekerVerification = async (req, res, jobSeeker, phone, category,
     registrationStep: jobSeeker.registrationStep,
     isRegistrationComplete: jobSeeker.isRegistrationComplete,
     status: jobSeeker.status,
+    fcmTokens: updatedFcmTokens,
   };
 
   // Set refresh token as HTTP-only cookie
@@ -216,7 +234,7 @@ const handleJobSeekerVerification = async (req, res, jobSeeker, phone, category,
 /**
  * Handle Recruiter OTP Verification
  */
-const handleRecruiterVerification = async (req, res, recruiter, phone, purpose) => {
+const handleRecruiterVerification = async (req, res, recruiter, phone, purpose, fcmToken) => {
   if (!recruiter) {
     // New recruiter - Registration flow
     recruiter = await Recruiter.create({
@@ -249,6 +267,17 @@ const handleRecruiterVerification = async (req, res, recruiter, phone, purpose) 
   recruiter.refreshToken = refreshToken;
   await recruiter.save();
 
+  // Register FCM token if provided - add to user's fcmTokens array
+  let updatedFcmTokens = recruiter.fcmTokens || [];
+  if (fcmToken) {
+    const updatedUser = await Recruiter.findByIdAndUpdate(
+      recruiter._id,
+      { $addToSet: { fcmTokens: fcmToken } },
+      { new: true }
+    );
+    updatedFcmTokens = updatedUser.fcmTokens;
+  }
+
   const safeRecruiter = {
     _id: recruiter._id,
     phone: recruiter.phone,
@@ -258,6 +287,7 @@ const handleRecruiterVerification = async (req, res, recruiter, phone, purpose) 
     status: recruiter.status,
     companyName: recruiter.companyName,
     role: recruiter.role,
+    fcmTokens: updatedFcmTokens,
   };
 
   const cookieOptions = {
@@ -285,54 +315,52 @@ const handleRecruiterVerification = async (req, res, recruiter, phone, purpose) 
 // Unified Logout for BOTH Recruiter and JobSeeker
 
 export const unifiedLogout = asyncHandler(async (req, res) => {
-  // Extract refresh token from either cookie or body
-  const refreshToken =
-    req.body.refreshToken ||
-    req.cookies?.recruiterRefreshToken ||
-    req.cookies?.refreshToken;
+  const accessToken = req.headers.authorization?.replace("Bearer ", "");
+  const { fcmToken } = req.body;
 
-  if (!refreshToken) {
-    throw new ApiError(400, "Refresh token missing");
+  if (!accessToken) {
+    return res.status(200).json(
+      ApiResponse.success(null, "Logged out successfully")
+    );
   }
 
-  // Try Recruiter first
-  let user = await Recruiter.findOne({ refreshToken }).select("+refreshToken");
-
-  if (user) {
-    user.refreshToken = null;
-    await user.save();
-
-    // Clear recruiter cookie
-    res.clearCookie("recruiterRefreshToken", {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
-    });
-
-    return res
-      .status(200)
-      .json(ApiResponse.success(null, "Recruiter logged out successfully"));
+  let decoded;
+  try {
+    const jwt = await import("jsonwebtoken");
+    decoded = jwt.default.decode(accessToken); // decode only (works even if expired)
+  } catch {
+    return res.status(200).json(
+      ApiResponse.success(null, "Logged out successfully")
+    );
   }
 
-  // Try Job Seeker now
-  user = await JobSeeker.findOne({ refreshToken }).select("+refreshToken");
-
-  if (user) {
-    user.refreshToken = null;
-    await user.save();
-
-    // Clear job seeker cookie
-    res.clearCookie("refreshToken", {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
-    });
-
-    return res
-      .status(200)
-      .json(ApiResponse.success(null, "Job Seeker logged out successfully"));
+  const userId = decoded?.id || decoded?._id;
+  if (!userId) {
+    return res.status(200).json(
+      ApiResponse.success(null, "Logged out successfully")
+    );
   }
 
-  throw new ApiError(400, "Invalid refresh token");
+  // Clear refreshToken and ALL fcmTokens
+  const updateQuery = {
+    $set: {
+      refreshToken: null,
+      fcmTokens: []  // Clear all FCM tokens on logout
+    }
+  };
+
+  let user =
+    (await JobSeeker.findByIdAndUpdate(userId, updateQuery)) ||
+    (await Recruiter.findByIdAndUpdate(userId, updateQuery));
+
+  // Clear cookie (web support)
+  res.clearCookie("refreshToken", {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "strict",
+  });
+
+  return res.status(200).json(
+    ApiResponse.success(null, "Logged out successfully")
+  );
 });
-

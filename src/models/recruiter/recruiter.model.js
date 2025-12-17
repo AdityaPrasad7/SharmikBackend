@@ -106,6 +106,12 @@ const recruiterSchema = new Schema(
       enum: ["recruiter"],
     },
 
+    // FCM Tokens for push notifications (multiple devices)
+    fcmTokens: {
+      type: [String],
+      default: [],
+    },
+
     // Authentication
     refreshToken: {
       type: String,

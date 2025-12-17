@@ -5,6 +5,8 @@ import mongoose from "mongoose";
 import { Application } from "../../../models/jobSeeker/application.model.js";
 import { RecruiterJob } from "../../../models/recruiter/jobPost/jobPost.model.js";
 import { JobSeeker } from "../../../models/jobSeeker/jobSeeker.model.js";
+import { fcmService } from "../../../firebase/fcm.service.js";
+import Notification from "../../../firebase/notification.model.js";
 
 /**
  * Get All Applications (Recruiter)
@@ -25,7 +27,7 @@ export const getJobsWithApplications = asyncHandler(async (req, res) => {
 
   // Get all job IDs for this recruiter
   const jobFilter = { recruiter: recruiter._id };
-  
+
   // Optional job status filter
   if (jobStatus) {
     jobFilter.status = jobStatus;
@@ -55,7 +57,7 @@ export const getJobsWithApplications = asyncHandler(async (req, res) => {
 
   // Build filter for applications
   const applicationFilter = { job: { $in: jobIds } };
-  
+
   // Optional application status filter
   if (applicationStatus) {
     applicationFilter.status = applicationStatus;
@@ -153,10 +155,10 @@ export const getJobsWithApplications = asyncHandler(async (req, res) => {
         skills: jobSeeker?.selectedSkills || jobSeeker?.skills || [],
         specialization: jobSeeker?.specializationId
           ? {
-              _id: jobSeeker.specializationId._id,
-              name: jobSeeker.specializationId.name,
-              skills: jobSeeker.specializationId.skills || [],
-            }
+            _id: jobSeeker.specializationId._id,
+            name: jobSeeker.specializationId.name,
+            skills: jobSeeker.specializationId.skills || [],
+          }
           : null,
         education: jobSeeker?.education || null,
         experienceStatus: jobSeeker?.experienceStatus,
@@ -307,10 +309,10 @@ export const getJobApplicants = asyncHandler(async (req, res) => {
         skills: jobSeeker.selectedSkills || jobSeeker.skills || [],
         specialization: jobSeeker.specializationId
           ? {
-              _id: jobSeeker.specializationId._id,
-              name: jobSeeker.specializationId.name,
-              skills: jobSeeker.specializationId.skills || [],
-            }
+            _id: jobSeeker.specializationId._id,
+            name: jobSeeker.specializationId.name,
+            skills: jobSeeker.specializationId.skills || [],
+          }
           : null,
         education: jobSeeker.education || null,
         experienceStatus: jobSeeker.experienceStatus,
@@ -416,6 +418,41 @@ export const shortlistApplicant = asyncHandler(async (req, res) => {
     },
   });
 
+  // Send push notification to job seeker (async, don't block response)
+  try {
+    await fcmService.sendToUser(application.jobSeeker._id, "JobSeeker", {
+      title: "🎉 Congratulations! You're Shortlisted",
+      body: `Your application for "${application.job.jobTitle}" has been shortlisted!`,
+      data: {
+        type: "application_shortlisted",
+        applicationId: application._id.toString(),
+        jobId: application.job._id.toString()
+      }
+    });
+
+    // Save notification to database
+    await Notification.create({
+      title: "🎉 Congratulations! You're Shortlisted",
+      body: `Your application for "${application.job.jobTitle}" has been shortlisted!`,
+      recipientType: "specific",
+      recipients: [{
+        userId: application.jobSeeker._id,
+        userType: "JobSeeker",
+        status: "sent",
+        sentAt: new Date()
+      }],
+      data: {
+        type: "application_shortlisted",
+        applicationId: application._id.toString(),
+        jobId: application.job._id.toString()
+      },
+      status: "sent",
+      sentAt: new Date()
+    });
+  } catch (err) {
+    console.error("Failed to send shortlist notification:", err.message);
+  }
+
   return res.status(200).json(
     ApiResponse.success(
       {
@@ -501,6 +538,41 @@ export const rejectApplicant = asyncHandler(async (req, res) => {
       select: "name skills",
     },
   });
+
+  // Send push notification to job seeker (async, don't block response)
+  try {
+    await fcmService.sendToUser(application.jobSeeker._id, "JobSeeker", {
+      title: "Application Update",
+      body: `Your application for "${application.job.jobTitle}" was not selected this time.`,
+      data: {
+        type: "application_rejected",
+        applicationId: application._id.toString(),
+        jobId: application.job._id.toString()
+      }
+    });
+
+    // Save notification to database
+    await Notification.create({
+      title: "Application Update",
+      body: `Your application for "${application.job.jobTitle}" was not selected this time.`,
+      recipientType: "specific",
+      recipients: [{
+        userId: application.jobSeeker._id,
+        userType: "JobSeeker",
+        status: "sent",
+        sentAt: new Date()
+      }],
+      data: {
+        type: "application_rejected",
+        applicationId: application._id.toString(),
+        jobId: application.job._id.toString()
+      },
+      status: "sent",
+      sentAt: new Date()
+    });
+  } catch (err) {
+    console.error("Failed to send rejection notification:", err.message);
+  }
 
   return res.status(200).json(
     ApiResponse.success(
@@ -595,8 +667,8 @@ export const getJobsWithShortlistedCandidates = asyncHandler(async (req, res) =>
 
   // Step 2: Get shortlist counts for these jobs
   const shortlistedCounts = await Application.aggregate([
-    { 
-      $match: { 
+    {
+      $match: {
         job: { $in: jobIds },
         status: "Shortlisted"
       }

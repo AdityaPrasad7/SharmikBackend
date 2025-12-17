@@ -18,6 +18,7 @@ import roleRoutes from "./role/role.routes.js";
 import locationRoutes from "./location/location.routes.js";
 import skillsRoutes from "./skills/skills.routes.js";
 import chatRoutes from "./chat/chat.routes.js";
+import notificationRoutes from "../firebase/notification.routes.js";
 
 const router = Router();
 
@@ -53,5 +54,8 @@ router.use("/api/roles", roleRoutes);
 router.use("/api/location", locationRoutes);
 router.use("/api/skills", skillsRoutes);
 router.use("/api/chat", chatRoutes);
+// Firebase push notification routes
+router.use("/api/notifications", notificationRoutes);
 
 export default router;
+

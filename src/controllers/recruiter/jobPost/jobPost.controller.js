@@ -8,6 +8,9 @@ import { Recruiter } from "../../../models/recruiter/recruiter.model.js";
 import { Specialization } from "../../../models/admin/specialization/specialization.model.js";
 import { CoinRule } from "../../../models/admin/coinPricing/coinPricing.model.js";
 import { deductCoins, checkCoinBalance } from "../../../services/coin/coinService.js";
+import { JobSeeker } from "../../../models/jobSeeker/jobSeeker.model.js";
+import { fcmService } from "../../../firebase/fcm.service.js";
+import Notification from "../../../firebase/notification.model.js";
 
 const normalizeArray = (value) => {
   if (!value) return [];
@@ -53,21 +56,21 @@ const parseSalaryFromSearch = (searchTerm) => {
     .replace(/l/gi, '00000') // Convert "L" or "l" to 00000
     .replace(/k/gi, '000') // Convert "k" to 000
     .replace(/thousand/gi, '000'); // Convert "thousand" to 000
-  
+
   // Extract number from string
   const numberMatch = cleaned.match(/\d+/);
   if (!numberMatch) return null;
-  
+
   let salary = parseFloat(numberMatch[0]);
-  
+
   // If the original search term contains "lakh" or "LPA" or "per annum", it's likely annual
   const isAnnual = /lakh|lpa|per\s*annum|annual|yearly/gi.test(searchTerm);
-  
+
   // Convert annual to monthly if needed (divide by 12)
   if (isAnnual && salary > 10000) {
     salary = Math.round(salary / 12);
   }
-  
+
   return salary;
 };
 
@@ -136,13 +139,13 @@ export const createRecruiterJob = asyncHandler(async (req, res) => {
   if (normalizedSkills.length > 0) {
     // Trim all skills before validation
     const trimmedSkills = normalizedSkills.map((skill) => skill.trim()).filter((skill) => skill);
-    
+
     if (trimmedSkills.length === 0) {
       throw new ApiError(400, "Skills cannot be empty. Please provide valid skills from /api/skills endpoint.");
     }
 
     const availableSkills = await getAllAvailableSkills();
-    
+
     // Check if all provided skills exist in available skills
     const invalidSkills = trimmedSkills.filter(
       (skill) => !availableSkills.includes(skill)
@@ -211,9 +214,9 @@ export const createRecruiterJob = asyncHandler(async (req, res) => {
     },
     preferredAgeRange: preferredAgeMin || preferredAgeMax
       ? {
-          minAge: preferredAgeMin ?? null,
-          maxAge: preferredAgeMax ?? null,
-        }
+        minAge: preferredAgeMin ?? null,
+        maxAge: preferredAgeMax ?? null,
+      }
       : {},
     qualifications: normalizedQualifications,
     responsibilities: normalizedResponsibilities,
@@ -264,17 +267,75 @@ export const createRecruiterJob = asyncHandler(async (req, res) => {
     },
     coinTransaction: coinTransaction
       ? {
-          amount: coinCostPerJobPost,
-          balanceAfter,
-          description: coinTransaction.description,
-        }
+        amount: coinCostPerJobPost,
+        balanceAfter,
+        description: coinTransaction.description,
+      }
       : null,
   };
+
+  // Notify job seekers with matching skills (background, don't block response)
+  notifyMatchingJobSeekers(job._id, normalizedSkills, jobTitle);
 
   return res
     .status(201)
     .json(ApiResponse.success(responsePayload, "Job posted successfully"));
 });
+
+/**
+ * Notify job seekers whose skills match the new job posting
+ * Runs asynchronously in the background
+ */
+async function notifyMatchingJobSeekers(jobId, jobSkills, jobTitle) {
+  try {
+    if (!jobSkills || jobSkills.length === 0) return;
+
+    // Find job seekers with matching skills who have FCM tokens
+    const matchingJobSeekers = await JobSeeker.find({
+      selectedSkills: { $in: jobSkills },
+      fcmTokens: { $exists: true, $ne: [] }
+    }).select("_id fcmTokens");
+
+    console.log(`📢 Found ${matchingJobSeekers.length} job seekers with matching skills for job: ${jobTitle}`);
+
+    // Send notifications to matching job seekers
+    for (const jobSeeker of matchingJobSeekers) {
+      try {
+        await fcmService.sendToUser(jobSeeker._id, "JobSeeker", {
+          title: "🔔 New Job Matches Your Skills!",
+          body: `A new job "${jobTitle}" matches your profile. Apply now!`,
+          data: {
+            type: "new_job_match",
+            jobId: jobId.toString()
+          }
+        });
+
+        // Save notification to database
+        await Notification.create({
+          title: "🔔 New Job Matches Your Skills!",
+          body: `A new job "${jobTitle}" matches your profile. Apply now!`,
+          recipientType: "specific",
+          recipients: [{
+            userId: jobSeeker._id,
+            userType: "JobSeeker",
+            status: "sent",
+            sentAt: new Date()
+          }],
+          data: {
+            type: "new_job_match",
+            jobId: jobId.toString()
+          },
+          status: "sent",
+          sentAt: new Date()
+        });
+      } catch (err) {
+        console.error(`Failed to notify job seeker ${jobSeeker._id}:`, err.message);
+      }
+    }
+  } catch (error) {
+    console.error("Error notifying matching job seekers:", error.message);
+  }
+}
 
 /**
  * Get All Job Posts (Public endpoint)
@@ -304,45 +365,45 @@ export const getAllJobPosts = asyncHandler(async (req, res) => {
 
   // Build filter object
   const filter = {};
-  
+
   // Filter by job seeker category if authenticated job seeker
   // If job seeker is authenticated, only show jobs matching their category
   if (req.jobSeeker && req.jobSeeker.category) {
     filter.jobSeekerCategory = req.jobSeeker.category;
   }
-  
+
   // Global search - searches across job title, description, city, company name, categories, tags, qualifications
   const searchTerm = search || q;
   let searchFilter = null;
   let recruiterIdsForSearch = [];
-  
+
   if (searchTerm && searchTerm.trim()) {
     const trimmedSearch = searchTerm.trim();
     const searchRegex = new RegExp(trimmedSearch, "i"); // Case-insensitive
-    
+
     // Parse salary from search term
     const parsedSalary = parseSalaryFromSearch(trimmedSearch);
-    
+
     // Check if search is purely a salary number (no other text)
     const isPureSalarySearch = /^[\d,\s]+(k|l|L|lakhs?|lpa|per\s*annum|annual|yearly)?$/i.test(trimmedSearch) && parsedSalary && parsedSalary > 0;
-    
+
     // Search in recruiter company names
     const matchingRecruiters = await Recruiter.find({
       companyName: { $regex: searchRegex }
     }).select("_id").lean();
-    
+
     recruiterIdsForSearch = matchingRecruiters.map(r => r._id);
-    
+
     // Build comprehensive search filter using $or
     const searchConditions = [];
-    
+
     // If it's a pure salary search, prioritize salary matching and be strict
     if (isPureSalarySearch && parsedSalary) {
       // For pure salary searches, only match jobs where:
       // 1. Searched salary falls within job's salary range, OR
       // 2. Job's salary range significantly overlaps with searched salary range (±15% tolerance)
       // This ensures we don't match jobs that are too far off (like 50k-80k when searching 100k)
-      
+
       // Condition 1: Searched salary falls within job's range
       searchConditions.push({
         $and: [
@@ -350,13 +411,13 @@ export const getAllJobPosts = asyncHandler(async (req, res) => {
           { "expectedSalary.max": { $gte: parsedSalary } }
         ]
       });
-      
+
       // Condition 2: Job's salary range significantly overlaps with searched salary
       // Use ±15% tolerance - job's range should overlap with [85k, 115k] when searching 100k
       const tolerance = parsedSalary * 0.15; // 15% tolerance (stricter)
       const minSalary = Math.max(0, parsedSalary - tolerance);
       const maxSalary = parsedSalary + tolerance;
-      
+
       // Match if job's salary range overlaps with the tolerance range
       // Job range overlaps if: job.min <= tolerance.max AND job.max >= tolerance.min
       searchConditions.push({
@@ -387,7 +448,7 @@ export const getAllJobPosts = asyncHandler(async (req, res) => {
         // Company name from recruiter (if recruiter IDs found)
         ...(recruiterIdsForSearch.length > 0 ? [{ recruiter: { $in: recruiterIdsForSearch } }] : [])
       );
-      
+
       // Add salary search if a valid salary number is found in search term (for mixed searches)
       if (parsedSalary && parsedSalary > 0) {
         // For mixed searches, be more lenient - match if searched salary is within range or close
@@ -421,7 +482,7 @@ export const getAllJobPosts = asyncHandler(async (req, res) => {
         });
       }
     }
-    
+
     searchFilter = {
       $or: searchConditions
     };
@@ -440,21 +501,21 @@ export const getAllJobPosts = asyncHandler(async (req, res) => {
 
   // City filter - supports both city ID(s) and city name(s)
   let cityNames = [];
-  
+
   // Priority 1: If cityIds (multiple) is provided
   if (cityIds) {
-    const cityIdArray = Array.isArray(cityIds) 
-      ? cityIds 
-      : typeof cityIds === "string" 
+    const cityIdArray = Array.isArray(cityIds)
+      ? cityIds
+      : typeof cityIds === "string"
         ? cityIds.split(",").map(id => id.trim()).filter(Boolean)
         : [];
-    
+
     if (cityIdArray.length > 0) {
-      const cities = await City.find({ 
+      const cities = await City.find({
         _id: { $in: cityIdArray },
-        status: "Active" 
+        status: "Active"
       }).select("name").lean();
-      
+
       cityNames = cities.map(c => c.name);
     }
   }
@@ -545,7 +606,7 @@ export const getAllJobPosts = asyncHandler(async (req, res) => {
       experienceFilter = {
         $or: [
           { "experienceRange.maxYears": { $gte: Number(experienceMax) } },
-          { 
+          {
             $and: [
               { "experienceRange.maxYears": null },
               { "experienceRange.minYears": { $lte: Number(experienceMax) } }
@@ -558,22 +619,22 @@ export const getAllJobPosts = asyncHandler(async (req, res) => {
 
   // Combine all filters
   const filtersToCombine = [];
-  
+
   // Add search filter if exists
   if (searchFilter) {
     filtersToCombine.push(searchFilter);
   }
-  
+
   // Add city filter if exists
   if (cityFilter) {
     filtersToCombine.push(cityFilter);
   }
-  
+
   // Add experience filter if exists
   if (experienceFilter) {
     filtersToCombine.push(experienceFilter);
   }
-  
+
   // Combine filters using $and if multiple $or filters exist
   if (filtersToCombine.length > 0) {
     if (filtersToCombine.length === 1) {
@@ -708,7 +769,7 @@ export const getAllJobPosts = asyncHandler(async (req, res) => {
           totalResults: totalJobs,
         },
       },
-      searchTerm 
+      searchTerm
         ? `Found ${totalJobs} job${totalJobs !== 1 ? "s" : ""} for "${searchTerm}"`
         : "Jobs fetched successfully"
     )
@@ -993,18 +1054,18 @@ export const repostJob = asyncHandler(async (req, res) => {
     statusEnum = RecruiterJob.schema.path("status").enumValues;
   }
 
- // Force reposted job to become Active/Open
-if (statusEnum.length > 0) {
-  if (statusEnum.includes("Active")) {
-    cloned.status = "Active";
-  } else if (statusEnum.includes("Open")) {
-    cloned.status = "Open";
+  // Force reposted job to become Active/Open
+  if (statusEnum.length > 0) {
+    if (statusEnum.includes("Active")) {
+      cloned.status = "Active";
+    } else if (statusEnum.includes("Open")) {
+      cloned.status = "Open";
+    } else {
+      cloned.status = statusEnum[0]; // fallback
+    }
   } else {
-    cloned.status = statusEnum[0]; // fallback
+    cloned.status = "Active";
   }
-} else {
-  cloned.status = "Active";
-}
 
 
   // Ensure fresh createdAt
@@ -1054,7 +1115,7 @@ export const getRecruiterJobs = asyncHandler(async (req, res) => {
 
   // Determine which recruiter ID to use
   let targetRecruiterId;
-  
+
   // If recruiterId is provided in params, use it
   if (recruiterId) {
     // Validate recruiter ID format
@@ -1062,11 +1123,11 @@ export const getRecruiterJobs = asyncHandler(async (req, res) => {
       throw new ApiError(400, "Invalid recruiter ID format");
     }
     targetRecruiterId = recruiterId;
-  } 
+  }
   // If authenticated recruiter is making the request, use their ID
   else if (req.recruiter) {
     targetRecruiterId = req.recruiter._id.toString();
-  } 
+  }
   // Otherwise, throw error
   else {
     throw new ApiError(400, "Recruiter ID is required");

@@ -125,8 +125,8 @@ const jobSeekerSchema = new Schema(
 
     // Experience Status (true = has experience, false = is fresher)
     experienceStatus: {
-        type: Boolean,
-        default: false,
+      type: Boolean,
+      default: false,
     },
 
     // About Me Section
@@ -157,6 +157,12 @@ const jobSeekerSchema = new Schema(
       type: Number,
       default: 0,
       min: 0,
+    },
+
+    // FCM Tokens for push notifications (multiple devices)
+    fcmTokens: {
+      type: [String],
+      default: [],
     },
 
     // Authentication

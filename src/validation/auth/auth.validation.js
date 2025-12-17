@@ -31,7 +31,7 @@ const categorySchema = Joi.string()
 export const sendOTPSchema = Joi.object({
   phone: phoneSchema,
   category: categorySchema, // Optional - helps determine user type for new users
-}); 
+});
 
 // Unified Verify OTP Schema
 // category is required only for new job seeker registration
@@ -39,5 +39,6 @@ export const verifyOTPSchema = Joi.object({
   phone: phoneSchema,
   otp: otpSchema,
   category: categorySchema, // Optional - required only for new job seeker registration
+  fcmToken: Joi.string().optional(), // Optional - FCM token for push notifications
 });
 
