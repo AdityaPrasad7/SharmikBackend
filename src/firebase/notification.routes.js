@@ -10,6 +10,8 @@ import {
     subscribeToTopic,
     unsubscribeFromTopic,
     getMyNotifications,
+    deleteMyNotification,
+    deleteAllMyNotifications,
 } from "./notification.controller.js";
 import { verifyNotificationAuth } from "./notification.middleware.js";
 
@@ -44,6 +46,28 @@ router.post("/unsubscribe-topic", unsubscribeFromTopic);
  * @access  Private (JobSeeker/Recruiter)
  */
 router.get("/my-notifications", verifyNotificationAuth, getMyNotifications);
+
+/**
+ * @route   DELETE /api/notifications/my-notifications/:id
+ * @desc    Delete a single notification for the user
+ * @access  Private (JobSeeker/Recruiter)
+ */
+router.delete("/my-notifications/:id", verifyNotificationAuth, deleteMyNotification);
+
+/**
+ * @route   DELETE /api/notifications/my-notifications/bulk
+ * @desc    Delete multiple notifications for the user (pass ids in body)
+ * @body    { "ids": ["id1", "id2", "id3"] }
+ * @access  Private (JobSeeker/Recruiter)
+ */
+router.post("/my-notifications/bulk-delete", verifyNotificationAuth, deleteMyNotification);
+
+/**
+ * @route   DELETE /api/notifications/my-notifications/all
+ * @desc    Delete all notifications for the user
+ * @access  Private (JobSeeker/Recruiter)
+ */
+router.delete("/my-notifications/all", verifyNotificationAuth, deleteAllMyNotifications);
 
 // ==================== Admin Routes ====================
 
@@ -90,3 +114,4 @@ router.get("/:id", getNotificationById);
 router.delete("/:id", deleteNotification);
 
 export default router;
+

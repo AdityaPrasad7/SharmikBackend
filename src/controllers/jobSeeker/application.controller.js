@@ -56,6 +56,31 @@ export const applyForJob = asyncHandler(async (req, res) => {
     );
 
     if (!balanceCheck.hasSufficientBalance) {
+      // Send low balance notification
+      try {
+        const { fcmService } = await import("../../firebase/fcm.service.js");
+        const Notification = (await import("../../firebase/notification.model.js")).default;
+
+        await fcmService.sendToUser(jobSeeker._id, "JobSeeker", {
+          title: "⚠️ Low Coin Balance",
+          body: `You need ${coinCostPerApplication} coins to apply. Current balance: ${balanceCheck.currentBalance} coins. Purchase more coins!`,
+          data: { type: "low_coin_balance", requiredCoins: String(coinCostPerApplication), currentBalance: String(balanceCheck.currentBalance) }
+        });
+
+        // Save notification to database
+        await Notification.create({
+          title: "⚠️ Low Coin Balance",
+          body: `You need ${coinCostPerApplication} coins to apply. Current balance: ${balanceCheck.currentBalance} coins. Purchase more coins!`,
+          recipientType: "specific",
+          recipients: [{ userId: jobSeeker._id, userType: "JobSeeker", status: "sent", sentAt: new Date() }],
+          data: { type: "low_coin_balance", requiredCoins: String(coinCostPerApplication), currentBalance: String(balanceCheck.currentBalance) },
+          status: "sent",
+          sentAt: new Date()
+        });
+      } catch (err) {
+        console.error("Failed to send low balance notification:", err.message);
+      }
+
       throw new ApiError(
         400,
         `Insufficient coin balance. Required: ${coinCostPerApplication} coins, Available: ${balanceCheck.currentBalance} coins. Please purchase more coins.`
@@ -86,7 +111,7 @@ export const applyForJob = asyncHandler(async (req, res) => {
       const updatedJob = await RecruiterJob.findByIdAndUpdate(
         jobId,
         {
-        $inc: { applicationCount: 1 },
+          $inc: { applicationCount: 1 },
         },
         { new: true }
       );
@@ -149,7 +174,7 @@ export const applyForJob = asyncHandler(async (req, res) => {
   const updatedJob = await RecruiterJob.findByIdAndUpdate(
     jobId,
     {
-    $inc: { applicationCount: 1 },
+      $inc: { applicationCount: 1 },
     },
     { new: true }
   );
@@ -180,10 +205,10 @@ export const applyForJob = asyncHandler(async (req, res) => {
         application,
         coinTransaction: coinTransaction
           ? {
-              amount: coinCostPerApplication,
-              balanceAfter,
-              description: coinTransaction.description,
-            }
+            amount: coinCostPerApplication,
+            balanceAfter,
+            description: coinTransaction.description,
+          }
           : null,
       },
       "Application submitted successfully"
@@ -206,7 +231,7 @@ export const getMyApplications = asyncHandler(async (req, res) => {
     if (status === "Accepted") {
       filter.status = "Shortlisted";
     } else {
-    filter.status = status;
+      filter.status = status;
     }
   }
 
@@ -243,7 +268,7 @@ export const getMyApplications = asyncHandler(async (req, res) => {
       displayStatus = "Accepted";
     }
     // Keep "Applied" and "Pending" as is - both are valid statuses
-    
+
     // Determine progress steps for UI progress tracker
     // Applied: always true once application is created
     // Pending: true if status is Applied, Pending, or beyond
@@ -255,23 +280,23 @@ export const getMyApplications = asyncHandler(async (req, res) => {
       accepted: application.status === "Shortlisted",
       rejected: application.status === "Rejected",
     };
-    
+
     // Format recruiter info (handle null cases)
-    const recruiterInfo = application.job?.recruiter 
+    const recruiterInfo = application.job?.recruiter
       ? {
-          _id: application.job.recruiter._id,
-          companyName: application.job.recruiter.companyName || application.job.companySnapshot?.name || "Company",
-          companyLogo: application.job.recruiter.companyLogo || application.job.companySnapshot?.logo || "",
-          city: application.job.recruiter.city || application.job.city || "",
-          state: application.job.recruiter.state || "",
-        }
+        _id: application.job.recruiter._id,
+        companyName: application.job.recruiter.companyName || application.job.companySnapshot?.name || "Company",
+        companyLogo: application.job.recruiter.companyLogo || application.job.companySnapshot?.logo || "",
+        city: application.job.recruiter.city || application.job.city || "",
+        state: application.job.recruiter.state || "",
+      }
       : {
-          companyName: application.job?.companySnapshot?.name || "Company",
-          companyLogo: application.job?.companySnapshot?.logo || "",
-          city: application.job?.city || "",
-          state: "",
-        };
-    
+        companyName: application.job?.companySnapshot?.name || "Company",
+        companyLogo: application.job?.companySnapshot?.logo || "",
+        city: application.job?.city || "",
+        state: "",
+      };
+
     return {
       _id: application._id,
       status: displayStatus,

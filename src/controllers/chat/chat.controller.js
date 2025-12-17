@@ -9,6 +9,8 @@ import ApiResponse from "../../utils/ApiResponse.js";
 import { asyncHandler } from "../../utils/asyncHandler.js";
 import mongoose from "mongoose";
 import { io, onlineUsers } from "../../../server.js";
+import fcmService from "../../firebase/fcm.service.js";
+import Notification from "../../firebase/notification.model.js";
 
 /**
  * Send Message
@@ -45,6 +47,7 @@ export const sendMessage = asyncHandler(async (req, res) => {
   // Find/Create Conversation
   let conversation = await Conversation.findOne({ application: applicationId });
 
+  let isFirstConversation = false;
   if (!conversation) {
     if (userType !== "recruiter")
       throw new ApiError(403, "Only recruiter can initiate a conversation");
@@ -57,6 +60,60 @@ export const sendMessage = asyncHandler(async (req, res) => {
       initiatedBy: "recruiter",
       status: "active",
     });
+    isFirstConversation = true;
+  }
+
+  // Send notification to job-seeker when recruiter initiates chat for the first time
+  if (isFirstConversation) {
+    try {
+      // Get recruiter details for the notification
+      const recruiter = await Recruiter.findById(job.recruiter).select("companyName");
+      const companyName = recruiter?.companyName || "A recruiter";
+
+      const notificationTitle = "New Chat Started!";
+      const notificationBody = `${companyName} has started a conversation with you regarding your job application.`;
+
+      // Send push notification to job-seeker
+      const notificationResult = await fcmService.sendToUser(
+        application.jobSeeker.toString(),
+        "JobSeeker",
+        {
+          title: notificationTitle,
+          body: notificationBody,
+          data: {
+            type: "chat_initiated",
+            applicationId: applicationId,
+            conversationId: conversation._id.toString(),
+          },
+        }
+      );
+
+      // Save notification record
+      if (notificationResult.success) {
+        await Notification.create({
+          title: notificationTitle,
+          body: notificationBody,
+          recipientType: "specific",
+          recipients: [{
+            userId: application.jobSeeker,
+            userType: "JobSeeker",
+            status: "sent"
+          }],
+          data: new Map([
+            ["type", "chat_initiated"],
+            ["applicationId", applicationId],
+            ["conversationId", conversation._id.toString()]
+          ]),
+          status: "sent",
+          sentAt: new Date(),
+        });
+      }
+
+      console.log("📲 Chat initiation notification sent to job-seeker:", notificationResult);
+    } catch (notificationError) {
+      // Don't fail the chat creation if notification fails
+      console.error("❌ Failed to send chat initiation notification:", notificationError.message);
+    }
   }
 
   // FILE UPLOADS

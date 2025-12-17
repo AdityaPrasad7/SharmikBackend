@@ -501,9 +501,15 @@ export const getMyNotifications = async (req, res) => {
         const role = req.user.role;
 
         // Convert role to userType for query
-        const userType = role === "job-seeker" || role === "Worker" ? "JobSeeker" : "Recruiter";
+        const userType = (role === "job-seeker" || role === "Worker" || role === "JobSeeker") ? "JobSeeker" : "Recruiter";
 
         const { page = 1, limit = 20 } = req.query;
+
+        // Import mongoose for ObjectId conversion
+        const mongoose = await import("mongoose");
+
+        // Convert userId to ObjectId for proper comparison
+        const userObjectId = new mongoose.default.Types.ObjectId(userId.toString());
 
         // Find notifications where user is a recipient or sent to their type
         const query = {
@@ -512,8 +518,12 @@ export const getMyNotifications = async (req, res) => {
                 { recipientType: userType === "JobSeeker" ? "jobSeekers" : "recruiters" },
                 {
                     recipientType: "specific",
-                    "recipients.userId": userId,
-                    "recipients.userType": userType,
+                    recipients: {
+                        $elemMatch: {
+                            userId: userObjectId,
+                            userType: userType,
+                        }
+                    }
                 },
             ],
             status: "sent",
@@ -523,7 +533,7 @@ export const getMyNotifications = async (req, res) => {
             .sort({ sentAt: -1 })
             .skip((page - 1) * limit)
             .limit(parseInt(limit))
-            .select("title body imageUrl link sentAt");
+            .select("title body imageUrl link sentAt recipientType");
 
         const total = await Notification.countDocuments(query);
 
@@ -543,6 +553,132 @@ export const getMyNotifications = async (req, res) => {
         res.status(error.statusCode || 500).json({
             success: false,
             message: error.message || "Failed to fetch notifications",
+            data: null,
+            meta: null,
+        });
+    }
+};
+
+/**
+ * Delete Notification(s) for User
+ * DELETE /api/notifications/my-notifications/:id - Delete single notification
+ * DELETE /api/notifications/my-notifications - Delete multiple notifications (pass ids in body)
+ * 
+ * Body (for multiple): { "ids": ["id1", "id2", "id3"] }
+ */
+export const deleteMyNotification = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { ids } = req.body; // Array of notification IDs for bulk delete
+        const userId = req.user._id || req.user.id;
+        const role = req.user.role;
+
+        // Convert role to userType
+        const userType = (role === "job-seeker" || role === "Worker" || role === "JobSeeker") ? "JobSeeker" : "Recruiter";
+
+        // Import mongoose for ObjectId conversion
+        const mongoose = await import("mongoose");
+
+        // Convert userId to ObjectId for proper comparison
+        const userObjectId = new mongoose.default.Types.ObjectId(userId.toString());
+
+        // Determine which IDs to delete
+        let notificationIds = [];
+
+        if (id) {
+            // Single ID from URL params
+            notificationIds = [id];
+        } else if (ids && Array.isArray(ids) && ids.length > 0) {
+            // Multiple IDs from request body
+            notificationIds = ids;
+        } else {
+            throw new ApiError(400, "Notification ID(s) required. Pass single id in URL or ids array in body.");
+        }
+
+        // Delete notifications that:
+        // 1. Match the notification IDs
+        // 2. User has permission to see (based on recipientType)
+        const result = await Notification.deleteMany({
+            _id: { $in: notificationIds },
+            $or: [
+                // Notifications sent to all users
+                { recipientType: "all" },
+                // Notifications sent to user's type (jobSeekers or recruiters)
+                { recipientType: userType === "JobSeeker" ? "jobSeekers" : "recruiters" },
+                // Notifications specifically sent to this user
+                {
+                    recipientType: "specific",
+                    recipients: {
+                        $elemMatch: {
+                            userId: userObjectId,
+                            userType: userType
+                        }
+                    }
+                }
+            ]
+        });
+
+        if (result.deletedCount === 0) {
+            throw new ApiError(404, "No notifications found or you don't have permission to delete them");
+        }
+
+        res.status(200).json({
+            success: true,
+            message: `${result.deletedCount} notification(s) deleted successfully`,
+            data: { deletedCount: result.deletedCount },
+            meta: null,
+        });
+    } catch (error) {
+        console.error("❌ Error deleting notification:", error.message);
+        res.status(error.statusCode || 500).json({
+            success: false,
+            message: error.message || "Failed to delete notification",
+            data: null,
+            meta: null,
+        });
+    }
+};
+
+/**
+ * Delete All Notifications for User
+ * DELETE /api/notifications/my-notifications
+ */
+export const deleteAllMyNotifications = async (req, res) => {
+    try {
+        const userId = req.user._id || req.user.id;
+        const role = req.user.role;
+
+        // Convert role to userType
+        const userType = (role === "job-seeker" || role === "Worker" || role === "JobSeeker") ? "JobSeeker" : "Recruiter";
+
+        // Import mongoose for ObjectId conversion
+        const mongoose = await import("mongoose");
+
+        // Convert userId to ObjectId for proper comparison
+        const userObjectId = new mongoose.default.Types.ObjectId(userId.toString());
+
+        // Delete all notifications where user is a recipient
+        const result = await Notification.deleteMany({
+            recipientType: "specific",
+            recipients: {
+                $elemMatch: {
+                    userId: userObjectId,
+                    userType: userType
+                }
+            }
+        });
+
+        res.status(200).json({
+            success: true,
+            message: `${result.deletedCount} notification(s) deleted successfully`,
+            data: { deletedCount: result.deletedCount },
+            meta: null,
+        });
+    } catch (error) {
+        console.error("❌ Error deleting notifications:", error.message);
+        res.status(error.statusCode || 500).json({
+            success: false,
+            message: error.message || "Failed to delete notifications",
             data: null,
             meta: null,
         });

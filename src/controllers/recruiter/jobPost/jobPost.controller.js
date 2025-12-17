@@ -176,6 +176,31 @@ export const createRecruiterJob = asyncHandler(async (req, res) => {
     );
 
     if (!balanceCheck.hasSufficientBalance) {
+      // Send low balance notification
+      try {
+        const { fcmService } = await import("../../../firebase/fcm.service.js");
+        const Notification = (await import("../../../firebase/notification.model.js")).default;
+
+        await fcmService.sendToUser(recruiter._id, "Recruiter", {
+          title: "⚠️ Low Coin Balance",
+          body: `You need ${coinCostPerJobPost} coins to post a job. Current balance: ${balanceCheck.currentBalance} coins. Purchase more coins!`,
+          data: { type: "low_coin_balance", requiredCoins: String(coinCostPerJobPost), currentBalance: String(balanceCheck.currentBalance) }
+        });
+
+        // Save notification to database
+        await Notification.create({
+          title: "⚠️ Low Coin Balance",
+          body: `You need ${coinCostPerJobPost} coins to post a job. Current balance: ${balanceCheck.currentBalance} coins. Purchase more coins!`,
+          recipientType: "specific",
+          recipients: [{ userId: recruiter._id, userType: "Recruiter", status: "sent", sentAt: new Date() }],
+          data: { type: "low_coin_balance", requiredCoins: String(coinCostPerJobPost), currentBalance: String(balanceCheck.currentBalance) },
+          status: "sent",
+          sentAt: new Date()
+        });
+      } catch (err) {
+        console.error("Failed to send low balance notification:", err.message);
+      }
+
       throw new ApiError(
         400,
         `Insufficient coin balance. Required: ${coinCostPerJobPost} coins, Available: ${balanceCheck.currentBalance} coins. Please purchase more coins.`
