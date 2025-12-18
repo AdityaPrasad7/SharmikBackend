@@ -119,6 +119,27 @@ const notificationSchema = new Schema(
             type: Schema.Types.ObjectId,
             ref: "User",
         },
+        // Flag to identify notifications sent from admin panel
+        isAdminSent: {
+            type: Boolean,
+            default: false,
+        },
+        // Track users who have deleted/dismissed this notification (for broadcast messages)
+        deletedBy: [{
+            userId: {
+                type: Schema.Types.ObjectId,
+                required: true,
+            },
+            userType: {
+                type: String,
+                enum: ["JobSeeker", "Recruiter"],
+                required: true,
+            },
+            deletedAt: {
+                type: Date,
+                default: Date.now,
+            },
+        }],
     },
     {
         timestamps: true,
