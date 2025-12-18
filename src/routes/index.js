@@ -19,6 +19,8 @@ import locationRoutes from "./location/location.routes.js";
 import skillsRoutes from "./skills/skills.routes.js";
 import chatRoutes from "./chat/chat.routes.js";
 import notificationRoutes from "../firebase/notification.routes.js";
+import jobSeekerPaymentRoutes from "./jobSeeker/payment.routes.js";
+import recruiterPaymentRoutes from "./recruiter/payment.routes.js";
 
 const router = Router();
 
@@ -56,6 +58,11 @@ router.use("/api/skills", skillsRoutes);
 router.use("/api/chat", chatRoutes);
 // Firebase push notification routes
 router.use("/api/notifications", notificationRoutes);
+
+//payment routes
+router.use("/api/job-seekers/payment", jobSeekerPaymentRoutes);
+router.use("/api/recruiters/payment", recruiterPaymentRoutes);
+
 
 export default router;
 

@@ -42,8 +42,10 @@ const coinTransactionSchema = new Schema(
     razorpayOrderId: {
       type: String,
       trim: true,
-      index: true,
+      unique: true,
+      sparse: true
     },
+
     razorpayPaymentId: {
       type: String,
       trim: true,
@@ -55,7 +57,8 @@ const coinTransactionSchema = new Schema(
     status: {
       type: String,
       enum: ["pending", "success", "failed", "refunded"],
-      default: "success",
+      // default: "success",
+      default: "pending",
       index: true,
     },
     description: {
