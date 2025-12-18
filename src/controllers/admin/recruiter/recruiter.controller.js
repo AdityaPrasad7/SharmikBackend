@@ -177,10 +177,22 @@ export const getRecruiterActivity = asyncHandler(async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
+    const { search } = req.query;
     const { startDate, endDate } = parseDateRange(req.query);
 
     // Build query - include all recruiters, not just those with complete registration
     const query = {}; // Show all recruiters for admin view
+
+    // Add search filter (search by name, company name, phone, or email)
+    if (search && search.trim()) {
+        const searchRegex = new RegExp(search.trim(), "i");
+        query.$or = [
+            { name: searchRegex },
+            { companyName: searchRegex },
+            { phone: searchRegex },
+            { email: searchRegex }
+        ];
+    }
 
     if (startDate && endDate) {
         query.createdAt = { $gte: startDate, $lte: endDate };

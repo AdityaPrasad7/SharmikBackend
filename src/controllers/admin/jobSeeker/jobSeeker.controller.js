@@ -178,7 +178,7 @@ export const getTopJobSeekers = asyncHandler(async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
-    const { category } = req.query;
+    const { category, search } = req.query;
     const { startDate, endDate } = parseDateRange(req.query);
 
     // Build query
@@ -186,6 +186,16 @@ export const getTopJobSeekers = asyncHandler(async (req, res) => {
         status: "Active",
         isRegistrationComplete: true
     };
+
+    // Add search filter (search by name, phone, or email)
+    if (search && search.trim()) {
+        const searchRegex = new RegExp(search.trim(), "i");
+        query.$or = [
+            { name: searchRegex },
+            { phone: searchRegex },
+            { email: searchRegex }
+        ];
+    }
 
     if (category && category !== "All") {
         query.category = category;

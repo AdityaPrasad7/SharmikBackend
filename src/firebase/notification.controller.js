@@ -96,6 +96,7 @@ export const sendNotification = async (req, res) => {
             isScheduled: !!scheduledAt,
             status: scheduledAt ? "scheduled" : "sending",
             createdBy: req.user?.userId,
+            isAdminSent: true, // Mark as sent from admin panel
         });
 
         // If scheduled, save and return
@@ -240,11 +241,16 @@ export const sendToUser = async (req, res) => {
  */
 export const getNotificationHistory = async (req, res) => {
     try {
-        const { page = 1, limit = 20, status, recipientType } = req.query;
+        const { page = 1, limit = 20, status, recipientType, adminOnly } = req.query;
 
         const query = {};
         if (status) query.status = status;
         if (recipientType) query.recipientType = recipientType;
+
+        // Filter to show only admin-sent notifications
+        if (adminOnly === 'true') {
+            query.isAdminSent = true;
+        }
 
         const notifications = await Notification.find(query)
             .sort({ createdAt: -1 })
@@ -512,6 +518,7 @@ export const getMyNotifications = async (req, res) => {
         const userObjectId = new mongoose.default.Types.ObjectId(userId.toString());
 
         // Find notifications where user is a recipient or sent to their type
+        // AND user has not deleted this notification
         const query = {
             $or: [
                 { recipientType: "all" },
@@ -527,6 +534,8 @@ export const getMyNotifications = async (req, res) => {
                 },
             ],
             status: "sent",
+            // Exclude notifications where this user has deleted/dismissed it
+            "deletedBy.userId": { $ne: userObjectId },
         };
 
         const notifications = await Notification.find(query)
@@ -595,17 +604,12 @@ export const deleteMyNotification = async (req, res) => {
             throw new ApiError(400, "Notification ID(s) required. Pass single id in URL or ids array in body.");
         }
 
-        // Delete notifications that:
-        // 1. Match the notification IDs
-        // 2. User has permission to see (based on recipientType)
-        const result = await Notification.deleteMany({
+        // Find notifications to determine delete strategy
+        const notifications = await Notification.find({
             _id: { $in: notificationIds },
             $or: [
-                // Notifications sent to all users
                 { recipientType: "all" },
-                // Notifications sent to user's type (jobSeekers or recruiters)
                 { recipientType: userType === "JobSeeker" ? "jobSeekers" : "recruiters" },
-                // Notifications specifically sent to this user
                 {
                     recipientType: "specific",
                     recipients: {
@@ -618,14 +622,40 @@ export const deleteMyNotification = async (req, res) => {
             ]
         });
 
-        if (result.deletedCount === 0) {
+        if (notifications.length === 0) {
             throw new ApiError(404, "No notifications found or you don't have permission to delete them");
+        }
+
+        let softDeleteCount = 0;
+        let hardDeleteCount = 0;
+
+        for (const notification of notifications) {
+            if (notification.recipientType === "specific") {
+                // For specific user notifications, actually delete them
+                await Notification.deleteOne({ _id: notification._id });
+                hardDeleteCount++;
+            } else {
+                // For broadcast notifications (all, jobSeekers, recruiters), add user to deletedBy array
+                await Notification.updateOne(
+                    { _id: notification._id },
+                    {
+                        $addToSet: {
+                            deletedBy: {
+                                userId: userObjectId,
+                                userType: userType,
+                                deletedAt: new Date()
+                            }
+                        }
+                    }
+                );
+                softDeleteCount++;
+            }
         }
 
         res.status(200).json({
             success: true,
-            message: `${result.deletedCount} notification(s) deleted successfully`,
-            data: { deletedCount: result.deletedCount },
+            message: `${softDeleteCount + hardDeleteCount} notification(s) deleted successfully`,
+            data: { deletedCount: softDeleteCount + hardDeleteCount },
             meta: null,
         });
     } catch (error) {
@@ -657,21 +687,55 @@ export const deleteAllMyNotifications = async (req, res) => {
         // Convert userId to ObjectId for proper comparison
         const userObjectId = new mongoose.default.Types.ObjectId(userId.toString());
 
-        // Delete all notifications where user is a recipient
-        const result = await Notification.deleteMany({
-            recipientType: "specific",
-            recipients: {
-                $elemMatch: {
-                    userId: userObjectId,
-                    userType: userType
+        // Find all notifications for this user
+        const notifications = await Notification.find({
+            $or: [
+                { recipientType: "all" },
+                { recipientType: userType === "JobSeeker" ? "jobSeekers" : "recruiters" },
+                {
+                    recipientType: "specific",
+                    recipients: {
+                        $elemMatch: {
+                            userId: userObjectId,
+                            userType: userType
+                        }
+                    }
                 }
-            }
+            ],
+            status: "sent",
+            "deletedBy.userId": { $ne: userObjectId }
         });
+
+        let softDeleteCount = 0;
+        let hardDeleteCount = 0;
+
+        for (const notification of notifications) {
+            if (notification.recipientType === "specific") {
+                // For specific user notifications, actually delete them
+                await Notification.deleteOne({ _id: notification._id });
+                hardDeleteCount++;
+            } else {
+                // For broadcast notifications, add user to deletedBy array
+                await Notification.updateOne(
+                    { _id: notification._id },
+                    {
+                        $addToSet: {
+                            deletedBy: {
+                                userId: userObjectId,
+                                userType: userType,
+                                deletedAt: new Date()
+                            }
+                        }
+                    }
+                );
+                softDeleteCount++;
+            }
+        }
 
         res.status(200).json({
             success: true,
-            message: `${result.deletedCount} notification(s) deleted successfully`,
-            data: { deletedCount: result.deletedCount },
+            message: `${softDeleteCount + hardDeleteCount} notification(s) deleted successfully`,
+            data: { deletedCount: softDeleteCount + hardDeleteCount },
             meta: null,
         });
     } catch (error) {
