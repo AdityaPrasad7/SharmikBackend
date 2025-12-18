@@ -8,14 +8,10 @@ import { CoinTransaction } from "../../models/coin/coinTransaction.model.js";
 
 export const recruiterPayment = asyncHandler(async (req, res) => {
 
-    /* =====================================================
-       COMMIT: feat(auth): get authenticated recruiter from request
-    ===================================================== */
+    /*  get authenticated recruiter from request */
     const recruiter = req.recruiter;
 
-    /* =====================================================
-       COMMIT: chore(validation): validate payment request body
-    ===================================================== */
+    /* (validation): validate payment request body*/
     const {
         packageId,
         razorpayOrderId,
@@ -32,45 +28,37 @@ export const recruiterPayment = asyncHandler(async (req, res) => {
         throw new ApiError(400, "Missing payment details");
     }
 
-    /* =====================================================
-       COMMIT: feat(payment): verify Razorpay payment signature
-    ===================================================== */
+    /* verify Razorpay payment signature*/
     const expectedSignature = crypto
         .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
         .update(`${razorpayOrderId}|${razorpayPaymentId}`)
         .digest("hex");
 
-    // COMMIT: fix(payment): reject payment if Razorpay signature is invalid
+    //reject payment if Razorpay signature is invalid
     if (expectedSignature !== razorpaySignature) {
         throw new ApiError(400, "Invalid payment signature");
     }
 
-    /* =====================================================
-       COMMIT: feat(payment): validate coin package existence
-    ===================================================== */
+    /* validate coin package existence */
     const coinPackage = await CoinPackage.findById(packageId);
     if (!coinPackage) {
         throw new ApiError(404, "Package not found");
     }
 
-    /* =====================================================
-       COMMIT: feat(wallet): fetch last successful transaction for recruiter
-    ===================================================== */
+    /* fetch last successful transaction for recruiter*/
     const lastTxn = await CoinTransaction.findOne({
         userId: recruiter._id,
         userType: "recruiter",
         status: "success",
     }).sort({ createdAt: -1 });
 
-    // COMMIT: feat(wallet): handle first-time recruiter coin purchase
+    //  feat(wallet): handle first-time recruiter coin purchase
     const prevBalance = lastTxn ? lastTxn.balanceAfter : 0;
 
-    // COMMIT: feat(wallet): calculate updated recruiter wallet balance
+    // feat(wallet): calculate updated recruiter wallet balance
     const newBalance = prevBalance + coinPackage.coins;
 
-    /* =====================================================
-       COMMIT: feat(payment): persist recruiter coin purchase transaction
-    ===================================================== */
+    /* feat(payment): persist recruiter coin purchase transaction*/
     const txn = await CoinTransaction.create({
         userId: recruiter._id,
         userType: "recruiter",
@@ -86,9 +74,9 @@ export const recruiterPayment = asyncHandler(async (req, res) => {
         balanceAfter: newBalance,
     });
 
-    /* =====================================================
+    /*
        COMMIT: chore(response): return standardized payment success response
-    ===================================================== */
+    */
     return res.json(
         ApiResponse.success(
             {
