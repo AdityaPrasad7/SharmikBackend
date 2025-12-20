@@ -1,86 +1,3 @@
-// // // COMMIT: feat(payment): add recruiter coin payment controller
-// import crypto from "crypto";
-// import ApiResponse from "../../utils/ApiResponse.js";
-// import ApiError from "../../utils/ApiError.js";
-// import { asyncHandler } from "../../utils/asyncHandler.js";
-// import { CoinPackage } from "../../models/admin/coinPricing/coinPricing.model.js";
-// import { CoinTransaction } from "../../models/coin/coinTransaction.model.js";
-
-// export const recruiterPayment = asyncHandler(async (req, res) => {
-//     console.log(">>> [Payment Start] Received Body:", req.body);
-//     const recruiter = req.recruiter;
-//     const { packageId, razorpayOrderId, razorpayPaymentId, razorpaySignature } = req.body;
-
-//     // 1. Validation
-//     if (!packageId || !razorpayOrderId || !razorpayPaymentId || !razorpaySignature) {
-//         throw new ApiError(400, "Missing payment details");
-//     }
-
-//     // 2. Duplicate Check (using OrderId is safer than PaymentId)
-//     const existingTransaction = await CoinTransaction.findOne({ razorpayOrderId });
-//     if (existingTransaction && existingTransaction.status === "success") {
-//         return res.json(ApiResponse.success(
-//             { balanceAfter: existingTransaction.balanceAfter },
-//             "Payment already processed"
-//         ));
-//     }
-
-//     // 3. Signature Verification
-//     const expectedSignature = crypto
-//         .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
-//         .update(`${razorpayOrderId}|${razorpayPaymentId}`)
-//         .digest("hex");
-
-//     if (expectedSignature !== razorpaySignature) {
-//         throw new ApiError(400, "Invalid payment signature");
-//     }
-
-//     // 4. Get Package & Current Balance
-//     const coinPackage = await CoinPackage.findById(packageId);
-//     if (!coinPackage) throw new ApiError(404, "Package not found");
-
-//     const lastTxn = await CoinTransaction.findOne({
-//         userId: recruiter._id,
-//         status: "success",
-//     }).sort({ createdAt: -1 });
-
-//     const prevBalance = lastTxn ? lastTxn.balanceAfter : 0;
-//     const newBalance = prevBalance + coinPackage.coins;
-
-//     // 5. Atomic Update (The Production Way)
-//     try {
-//         const txn = await CoinTransaction.create({
-//             userId: recruiter._id,
-//             userType: "recruiter",
-//             userTypeModel: "Recruiter",
-//             transactionType: "purchase",
-//             amount: coinPackage.coins,
-//             price: coinPackage.price, // Changed from .price.amount unless nested
-//             razorpayOrderId,
-//             razorpayPaymentId,
-//             razorpaySignature,
-//             status: "success",
-//             description: "Recruiter coin purchase",
-//             balanceAfter: newBalance,
-//         });
-
-//         // CRITICAL: Update the Recruiter's wallet field
-//         await Recruiter.findByIdAndUpdate(recruiter._id, {
-//             $inc: { totalCoins: coinPackage.coins }
-//         });
-
-//         return res.json(ApiResponse.success({
-//             transactionId: txn._id,
-//             balanceAfter: newBalance,
-//         }, "Payment successful"));
-
-//     } catch (error) {
-//         if (error.code === 11000) { // MongoDB Duplicate Key Error
-//             throw new ApiError(400, "Transaction already processed");
-//         }
-//         throw error;
-//     }
-// });
 
 import crypto from "crypto";
 import mongoose from "mongoose";
@@ -95,31 +12,6 @@ export const recruiterPayment = asyncHandler(async (req, res) => {
     const recruiterId = req.recruiter._id;
     const { packageId, razorpayOrderId, razorpayPaymentId, razorpaySignature } = req.body;
 
-<<<<<<< Updated upstream
-    /*  get authenticated recruiter from request */
-    const recruiter = req.recruiter;
-
-    /* =====================================================
-       COMMIT: chore(validation): validate payment request body
-    ===================================================== */
-    const {
-        packageId,
-        razorpayOrderId,
-        razorpayPaymentId,
-        razorpaySignature,
-    } = req.body;
-
-    if (
-        !packageId ||
-        !razorpayOrderId ||
-        !razorpayPaymentId ||
-        !razorpaySignature
-    ) {
-        throw new ApiError(400, "Missing payment details");
-    }
-
-    /* verify Razorpay payment signature*/
-=======
     console.log(`[PAYMENT_START] Verify Request - Order: ${razorpayOrderId}, Recruiter: ${recruiterId}`);
 
     // 1. Basic Validation
@@ -139,79 +31,23 @@ export const recruiterPayment = asyncHandler(async (req, res) => {
     }
 
     // 3. Signature Verification
->>>>>>> Stashed changes
     const expectedSignature = crypto
         .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
         .update(`${razorpayOrderId}|${razorpayPaymentId}`)
         .digest("hex");
 
-<<<<<<< Updated upstream
-    //reject payment if Razorpay signature is invalid
-=======
->>>>>>> Stashed changes
     if (expectedSignature !== razorpaySignature) {
         console.error(`[PAYMENT_INVALID_SIG] Signature mismatch for Order: ${razorpayOrderId}`);
         throw new ApiError(400, "Invalid payment signature. Verification failed.");
     }
 
-<<<<<<< Updated upstream
-    /* validate coin package existence */
-=======
     // 4. Get Package Data
->>>>>>> Stashed changes
     const coinPackage = await CoinPackage.findById(packageId);
     if (!coinPackage) {
         console.error(`[PAYMENT_PACKAGE_NOT_FOUND] ID: ${packageId}`);
         throw new ApiError(404, "Selected coin package no longer exists.");
     }
 
-<<<<<<< Updated upstream
-    /* fetch last successful transaction for recruiter*/
-    const lastTxn = await CoinTransaction.findOne({
-        userId: recruiter._id,
-        userType: "recruiter",
-        status: "success",
-    }).sort({ createdAt: -1 });
-
-    // COMMIT: feat(wallet): handle first-time recruiter coin purchase
-    const prevBalance = lastTxn ? lastTxn.balanceAfter : 0;
-
-    // COMMIT: feat(wallet): calculate updated recruiter wallet balance
-    const newBalance = prevBalance + coinPackage.coins;
-
-    /* =====================================================
-       COMMIT: feat(payment): persist recruiter coin purchase transaction
-    ===================================================== */
-    const txn = await CoinTransaction.create({
-        userId: recruiter._id,
-        userType: "recruiter",
-        userTypeModel: "Recruiter",
-        transactionType: "purchase",
-        amount: coinPackage.coins,
-        price: coinPackage.price.amount,
-        razorpayOrderId,
-        razorpayPaymentId,
-        razorpaySignature,
-        status: "success",
-        description: "Recruiter coin purchase",
-        balanceAfter: newBalance,
-    });
-
-    /* =====================================================
-       COMMIT: chore(response): return standardized payment success response
-    ===================================================== */
-    return res.json(
-        ApiResponse.success(
-            {
-                transactionId: txn._id,
-                coinsAdded: coinPackage.coins,
-                balanceAfter: newBalance,
-            },
-            "Payment successful"
-        )
-    );
-});
-=======
     // 5. STAGE 2: Atomic Update using MongoDB Session
     // This ensures either BOTH the coins are added and receipt is saved, or NOTHING happens.
     const session = await mongoose.startSession();
@@ -275,4 +111,3 @@ export const recruiterPayment = asyncHandler(async (req, res) => {
         session.endSession();
     }
 });
->>>>>>> Stashed changes
