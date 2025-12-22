@@ -34,6 +34,8 @@ export const updateCoinPackageSchema = Joi.object({
 }).min(1);
 
 export const coinRuleSchema = Joi.object({
+  baseAmount: Joi.number().min(1).optional(),
+  baseCoins: Joi.number().min(1).optional(),
   coinCostPerApplication: Joi.number().min(0).optional(),
   coinPerEmployeeCount: Joi.number().min(0).optional(),
   coinCostPerJobPost: Joi.number().min(0).optional(),

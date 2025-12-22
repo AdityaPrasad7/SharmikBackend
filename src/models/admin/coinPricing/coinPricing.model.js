@@ -46,6 +46,18 @@ const coinRuleSchema = new Schema(
       required: true,
       unique: true,
     },
+    // Custom amount pricing: for ₹baseAmount, user gets baseCoins
+    // e.g., baseAmount=100, baseCoins=150 means ₹100 = 150 coins
+    baseAmount: {
+      type: Number,
+      default: 100,
+      min: 1,
+    },
+    baseCoins: {
+      type: Number,
+      default: 100,
+      min: 1,
+    },
     // For job seekers
     coinCostPerApplication: {
       type: Number,

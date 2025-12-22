@@ -4,26 +4,45 @@ import mongoose from "mongoose";
 import ApiResponse from "../../utils/ApiResponse.js";
 import ApiError from "../../utils/ApiError.js";
 import { asyncHandler } from "../../utils/asyncHandler.js";
-import { CoinPackage } from "../../models/admin/coinPricing/coinPricing.model.js";
+import { CoinPackage, CoinRule } from "../../models/admin/coinPricing/coinPricing.model.js";
 import { CoinTransaction } from "../../models/coin/coinTransaction.model.js";
 import { Recruiter } from "../../models/recruiter/recruiter.model.js";
 
+/**
+ * Recruiter Payment Controller
+ * ------------------------------------
+ * Supports TWO types of purchases:
+ * 1. Package Purchase: Provide packageId
+ * 2. Custom Amount: Provide amount (in INR) - coins calculated using rate
+ */
+
 export const recruiterPayment = asyncHandler(async (req, res) => {
     const recruiterId = req.recruiter._id;
-    const { packageId, razorpayOrderId, razorpayPaymentId, razorpaySignature } = req.body;
+    const { packageId, amount, razorpayOrderId, razorpayPaymentId, razorpaySignature } = req.body;
 
-    console.log(`[PAYMENT_START] Verify Request - Order: ${razorpayOrderId}, Recruiter: ${recruiterId}`);
+    console.log('\n========== RECRUITER PAYMENT API CALLED ==========');
+    console.log('[PAYMENT] Request Body:', JSON.stringify(req.body, null, 2));
+    console.log('[PAYMENT] Recruiter ID:', recruiterId);
+    console.log('[PAYMENT] Package ID:', packageId || 'Not provided (Custom Amount)');
+    console.log('[PAYMENT] Amount:', amount || 'Not provided (Package Purchase)');
+    console.log('[PAYMENT] Razorpay Order ID:', razorpayOrderId);
+    console.log('[PAYMENT] Razorpay Payment ID:', razorpayPaymentId);
+    console.log('===================================================\n');
 
-    // 1. Basic Validation
-    if (!packageId || !razorpayOrderId || !razorpayPaymentId || !razorpaySignature) {
+    // 1. Basic Validation - Either packageId OR amount required
+    if (!packageId && !amount) {
+        console.log('[PAYMENT_ERROR] Neither packageId nor amount provided!');
+        throw new ApiError(400, "Either packageId or amount is required");
+    }
+    if (!razorpayOrderId || !razorpayPaymentId || !razorpaySignature) {
+        console.log('[PAYMENT_ERROR] Missing Razorpay fields!');
         throw new ApiError(400, "Missing required payment fields");
     }
 
     // 2. STAGE 1: Check if this order was already processed (Prevention)
-    // We check this BEFORE signature verification to save CPU time if it's a duplicate.
     const duplicateCheck = await CoinTransaction.findOne({ razorpayOrderId });
     if (duplicateCheck && duplicateCheck.status === "success") {
-        console.warn(`[PAYMENT_ALREADY_DONE] Order ${razorpayOrderId} was already fulfilled. Blocking retry.`);
+        console.warn(`[PAYMENT_ALREADY_DONE] Order ${razorpayOrderId} was already fulfilled.`);
         return res.status(200).json(ApiResponse.success(
             { balanceAfter: duplicateCheck.balanceAfter },
             "Payment already processed successfully."
@@ -41,20 +60,49 @@ export const recruiterPayment = asyncHandler(async (req, res) => {
         throw new ApiError(400, "Invalid payment signature. Verification failed.");
     }
 
-    // 4. Get Package Data
-    const coinPackage = await CoinPackage.findById(packageId);
-    if (!coinPackage) {
-        console.error(`[PAYMENT_PACKAGE_NOT_FOUND] ID: ${packageId}`);
-        throw new ApiError(404, "Selected coin package no longer exists.");
+    // 4. DETERMINE COINS TO ADD
+    let coinsToAdd = 0;
+    let priceAmount = 0;
+    let description = "";
+
+    if (packageId) {
+        // PACKAGE PURCHASE
+        const coinPackage = await CoinPackage.findById(packageId);
+        if (!coinPackage) {
+            console.error(`[PAYMENT_PACKAGE_NOT_FOUND] ID: ${packageId}`);
+            throw new ApiError(404, "Selected coin package no longer exists.");
+        }
+        coinsToAdd = coinPackage.coins;
+        priceAmount = coinPackage.price?.amount || 0;
+        description = `Purchased ${coinPackage.name} (${coinPackage.coins} coins)`;
+    } else {
+        // CUSTOM AMOUNT PURCHASE
+        console.log('[PAYMENT] Custom Amount Mode - Fetching CoinRule...');
+        const rule = await CoinRule.findOne({ category: "recruiter" });
+        const baseAmount = rule?.baseAmount ?? 100;
+        const baseCoins = rule?.baseCoins ?? 100;
+
+        console.log('[PAYMENT] CoinRule Found:', { baseAmount, baseCoins });
+
+        // Calculate coins: (amount / baseAmount) * baseCoins
+        coinsToAdd = Math.floor((amount / baseAmount) * baseCoins);
+        priceAmount = amount;
+        description = `Custom purchase: ₹${amount} = ${coinsToAdd} coins`;
+
+        console.log('[PAYMENT] Calculated:', { amount, coinsToAdd, formula: `(${amount} / ${baseAmount}) * ${baseCoins}` });
+
+        if (coinsToAdd <= 0) {
+            console.log('[PAYMENT_ERROR] Coins to add is 0 or negative!');
+            throw new ApiError(400, "Invalid amount. Coins must be greater than 0.");
+        }
     }
 
     // 5. STAGE 2: Atomic Update using MongoDB Session
-    // This ensures either BOTH the coins are added and receipt is saved, or NOTHING happens.
     const session = await mongoose.startSession();
     session.startTransaction();
 
     try {
-        // Double check for duplicate INSIDE the session to prevent "Race Conditions"
+        // Double check for duplicate INSIDE the session to prevent Race Conditions
         const internalDuplicateCheck = await CoinTransaction.findOne({ razorpayOrderId }).session(session);
         if (internalDuplicateCheck) {
             await session.abortTransaction();
@@ -65,7 +113,7 @@ export const recruiterPayment = asyncHandler(async (req, res) => {
         // A. Increment coins in Recruiter model
         const updatedRecruiter = await Recruiter.findByIdAndUpdate(
             recruiterId,
-            { $inc: { coinBalance: coinPackage.coins } },
+            { $inc: { coinBalance: coinsToAdd } },
             { new: true, session }
         );
 
@@ -79,27 +127,35 @@ export const recruiterPayment = asyncHandler(async (req, res) => {
             userType: "recruiter",
             userTypeModel: "Recruiter",
             transactionType: "purchase",
-            amount: coinPackage.coins,
-            price: coinPackage.price.amount,
+            amount: coinsToAdd,
+            price: priceAmount,
             razorpayOrderId,
             razorpayPaymentId,
             razorpaySignature,
             status: "success",
-            description: `Purchased ${coinPackage.name} (${coinPackage.coins} coins)`,
+            description,
             balanceAfter: updatedRecruiter.coinBalance,
         }], { session });
 
         // Commit all changes to the database
         await session.commitTransaction();
-        console.log(`[PAYMENT_FINALIZED] Order: ${razorpayOrderId} | Coins Added: ${coinPackage.coins} | New Balance: ${updatedRecruiter.coinBalance}`);
+
+        console.log('\n========== PAYMENT SUCCESS ==========');
+        console.log('[SUCCESS] Recruiter ID:', recruiterId);
+        console.log('[SUCCESS] Coins Added:', coinsToAdd);
+        console.log('[SUCCESS] Previous Balance:', updatedRecruiter.coinBalance - coinsToAdd);
+        console.log('[SUCCESS] New Balance:', updatedRecruiter.coinBalance);
+        console.log('[SUCCESS] Transaction ID:', txn[0]._id);
+        console.log('[SUCCESS] Description:', description);
+        console.log('======================================\n');
 
         return res.json(ApiResponse.success({
             transactionId: txn[0]._id,
-            balanceAfter: updatedRecruiter.coinBalance,
+            coinsAdded: coinsToAdd,
+            currentBalance: updatedRecruiter.coinBalance,
         }, "Coins added successfully to your account."));
 
     } catch (error) {
-        // If anything fails, undo all database changes in this session
         await session.abortTransaction();
         console.error(`[PAYMENT_DB_FAILURE] Order: ${razorpayOrderId} | Error: ${error.message}`);
 

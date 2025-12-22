@@ -17,6 +17,8 @@ const toDTO = (coinPackage) => ({
 });
 
 const mapRule = (rule) => ({
+  baseAmount: rule?.baseAmount ?? 100,
+  baseCoins: rule?.baseCoins ?? 100,
   coinCostPerApplication: rule?.coinCostPerApplication ?? 0,
   coinPerEmployeeCount: rule?.coinPerEmployeeCount ?? 0,
   coinCostPerJobPost: rule?.coinCostPerJobPost ?? 0,
@@ -24,6 +26,12 @@ const mapRule = (rule) => ({
 
 const buildRuleUpdate = (body = {}) => {
   const update = {};
+  if (body.baseAmount !== undefined) {
+    update.baseAmount = body.baseAmount;
+  }
+  if (body.baseCoins !== undefined) {
+    update.baseCoins = body.baseCoins;
+  }
   if (body.coinCostPerApplication !== undefined) {
     update.coinCostPerApplication = body.coinCostPerApplication;
   }
@@ -123,17 +131,31 @@ export const deleteCoinPackage = asyncHandler(async (req, res) => {
 
 export const updateCoinRules = asyncHandler(async (req, res) => {
   const { category } = req.params;
-  const payload = buildRuleUpdate(req.body);
+  const { baseAmount, baseCoins, coinCostPerApplication, coinPerEmployeeCount, coinCostPerJobPost } = req.body;
 
-  if (!Object.keys(payload).length) {
-    throw new ApiError(400, "No rule fields provided to update");
+  console.log(`[COIN_RULES_UPDATE] Category: ${category}`);
+  console.log(`[COIN_RULES_UPDATE] Request Body:`, req.body);
+
+  // Find or create the rule
+  let rule = await CoinRule.findOne({ category });
+
+  if (!rule) {
+    // Create new rule if it doesn't exist
+    rule = new CoinRule({ category });
+    console.log(`[COIN_RULES_UPDATE] Creating new rule for category: ${category}`);
   }
 
-  const rule = await CoinRule.findOneAndUpdate(
-    { category },
-    payload,
-    { new: true, upsert: true, setDefaultsOnInsert: true }
-  );
+  // Update fields explicitly
+  if (baseAmount !== undefined) rule.baseAmount = baseAmount;
+  if (baseCoins !== undefined) rule.baseCoins = baseCoins;
+  if (coinCostPerApplication !== undefined) rule.coinCostPerApplication = coinCostPerApplication;
+  if (coinPerEmployeeCount !== undefined) rule.coinPerEmployeeCount = coinPerEmployeeCount;
+  if (coinCostPerJobPost !== undefined) rule.coinCostPerJobPost = coinCostPerJobPost;
+
+  // Save the rule
+  await rule.save();
+
+  console.log(`[COIN_RULES_UPDATE] Saved Rule:`, rule.toObject());
 
   res
     .status(200)

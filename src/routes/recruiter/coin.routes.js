@@ -6,6 +6,8 @@ import {
   getCoinPackageById,
   purchaseCoins,
   verifyPayment,
+  calculateCoinsForAmount,
+  getCoinsPerRupeeRate,
 } from "../../controllers/recruiter/coin.controller.js";
 import { verifyRecruiterJWT } from "../../middlewares/recruiter/authRecruiter.js";
 
@@ -25,6 +27,12 @@ router.get("/packages", getCoinPackages);
 
 // Get a single coin package by ID
 router.get("/packages/:packageId", getCoinPackageById);
+
+// Get coins per rupee rate
+router.get("/rate", getCoinsPerRupeeRate);
+
+// Calculate coins for a custom amount
+router.get("/calculate", calculateCoinsForAmount);
 
 // Purchase coins (MOCK)
 router.post("/purchase", purchaseCoins);

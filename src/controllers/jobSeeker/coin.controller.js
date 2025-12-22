@@ -7,7 +7,7 @@ import {
   addCoins,
   getTransactionHistory,
 } from "../../services/coin/coinService.js";
-import { CoinPackage } from "../../models/admin/coinPricing/coinPricing.model.js";
+import { CoinPackage, CoinRule } from "../../models/admin/coinPricing/coinPricing.model.js";
 
 /**
  * Get current coin balance
@@ -215,6 +215,64 @@ export const verifyPayment = asyncHandler(async (req, res) => {
         message: "Payment verified successfully (MOCK MODE)",
       },
       "Payment verified successfully"
+    )
+  );
+});
+
+/**
+ * Calculate coins for a custom amount
+ * Returns how many coins user will get for a given INR amount
+ */
+export const calculateCoinsForAmount = asyncHandler(async (req, res) => {
+  const { amount } = req.query;
+
+  if (!amount || isNaN(amount) || parseFloat(amount) <= 0) {
+    throw new ApiError(400, "Valid amount is required");
+  }
+
+  const amountInRupees = parseFloat(amount);
+
+  // Get coin rules for job seeker
+  const rule = await CoinRule.findOne({ category: "jobSeeker" });
+
+  const baseAmount = rule?.baseAmount ?? 100;
+  const baseCoins = rule?.baseCoins ?? 100;
+
+  // Calculate coins based on ratio: (amount / baseAmount) * baseCoins
+  const coinsToReceive = Math.floor((amountInRupees / baseAmount) * baseCoins);
+
+  return res.status(200).json(
+    ApiResponse.success(
+      {
+        amount: amountInRupees,
+        currency: "INR",
+        baseAmount,
+        baseCoins,
+        coinsToReceive,
+      },
+      "Coins calculated successfully"
+    )
+  );
+});
+
+/**
+ * Get coin rate
+ * Returns the current conversion rate for the user category
+ */
+export const getCoinsPerRupeeRate = asyncHandler(async (req, res) => {
+  const rule = await CoinRule.findOne({ category: "jobSeeker" });
+
+  const baseAmount = rule?.baseAmount ?? 100;
+  const baseCoins = rule?.baseCoins ?? 100;
+
+  return res.status(200).json(
+    ApiResponse.success(
+      {
+        baseAmount,
+        baseCoins,
+        currency: "INR",
+      },
+      "Rate retrieved successfully"
     )
   );
 });
