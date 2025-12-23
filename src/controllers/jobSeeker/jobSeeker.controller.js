@@ -575,7 +575,7 @@ export const step2Registration = asyncHandler(async (req, res) => {
  * - percentageOrGrade as separate field OR inside education object
  */
 export const step3Registration = asyncHandler(async (req, res) => {
-  const { phone, jobSeekerId, education, stateId, cityId, yearOfPassing, percentageOrGrade, experienceStatus } = req.body;
+  const { phone, jobSeekerId, education, stateId, cityId, yearOfPassing, percentageOrGrade, experienceStatus, yearOfExperience } = req.body;
 
   // Find job seeker - prefer jobSeekerId over phone
   let jobSeeker;
@@ -668,6 +668,7 @@ export const step3Registration = asyncHandler(async (req, res) => {
   // Update job seeker
   jobSeeker.education = finalEducation;
   jobSeeker.experienceStatus = experienceStatus;
+  jobSeeker.yearOfExperience = experienceStatus ? (yearOfExperience || "") : "";
   jobSeeker.resume = resume;
   if (experienceCertificate) {
     jobSeeker.experienceCertificate = experienceCertificate;

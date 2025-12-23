@@ -163,16 +163,19 @@ export const createRecruiterJob = asyncHandler(async (req, res) => {
     normalizedSkills.push(...trimmedSkills);
   }
 
-  // Fetch coin cost for job posting
+  // Fetch coin cost for job posting (per vacancy)
   const coinRule = await CoinRule.findOne({ category: "recruiter" });
   const coinCostPerJobPost = coinRule?.coinCostPerJobPost || 0;
 
+  // Calculate total coin cost based on vacancy count
+  const totalCoinCost = coinCostPerJobPost * (vacancyCount || 1);
+
   // Check coin balance if coin cost is set
-  if (coinCostPerJobPost > 0) {
+  if (totalCoinCost > 0) {
     const balanceCheck = await checkCoinBalance(
       recruiter._id,
       "recruiter",
-      coinCostPerJobPost
+      totalCoinCost
     );
 
     if (!balanceCheck.hasSufficientBalance) {
@@ -183,17 +186,17 @@ export const createRecruiterJob = asyncHandler(async (req, res) => {
 
         await fcmService.sendToUser(recruiter._id, "Recruiter", {
           title: "⚠️ Low Coin Balance",
-          body: `You need ${coinCostPerJobPost} coins to post a job. Current balance: ${balanceCheck.currentBalance} coins. Purchase more coins!`,
-          data: { type: "low_coin_balance", requiredCoins: String(coinCostPerJobPost), currentBalance: String(balanceCheck.currentBalance) }
+          body: `You need ${totalCoinCost} coins to post this job (${coinCostPerJobPost} × ${vacancyCount} vacancies). Current balance: ${balanceCheck.currentBalance} coins. Purchase more coins!`,
+          data: { type: "low_coin_balance", requiredCoins: String(totalCoinCost), currentBalance: String(balanceCheck.currentBalance) }
         });
 
         // Save notification to database
         await Notification.create({
           title: "⚠️ Low Coin Balance",
-          body: `You need ${coinCostPerJobPost} coins to post a job. Current balance: ${balanceCheck.currentBalance} coins. Purchase more coins!`,
+          body: `You need ${totalCoinCost} coins to post this job (${coinCostPerJobPost} × ${vacancyCount} vacancies). Current balance: ${balanceCheck.currentBalance} coins. Purchase more coins!`,
           recipientType: "specific",
           recipients: [{ userId: recruiter._id, userType: "Recruiter", status: "sent", sentAt: new Date() }],
-          data: { type: "low_coin_balance", requiredCoins: String(coinCostPerJobPost), currentBalance: String(balanceCheck.currentBalance) },
+          data: { type: "low_coin_balance", requiredCoins: String(totalCoinCost), currentBalance: String(balanceCheck.currentBalance) },
           status: "sent",
           sentAt: new Date()
         });
@@ -203,7 +206,7 @@ export const createRecruiterJob = asyncHandler(async (req, res) => {
 
       throw new ApiError(
         400,
-        `Insufficient coin balance. Required: ${coinCostPerJobPost} coins, Available: ${balanceCheck.currentBalance} coins. Please purchase more coins.`
+        `Insufficient coin balance. Required: ${totalCoinCost} coins (${coinCostPerJobPost} × ${vacancyCount} vacancies), Available: ${balanceCheck.currentBalance} coins. Please purchase more coins.`
       );
     }
   }
@@ -251,13 +254,13 @@ export const createRecruiterJob = asyncHandler(async (req, res) => {
   // Deduct coins after successful job creation
   let coinTransaction = null;
   let balanceAfter = null;
-  if (coinCostPerJobPost > 0) {
+  if (totalCoinCost > 0) {
     try {
       const deductionResult = await deductCoins(
         recruiter._id,
         "recruiter",
-        coinCostPerJobPost,
-        `Job Post Creation: ${jobTitle}`,
+        totalCoinCost,
+        `Job Post: ${jobTitle} (${vacancyCount} vacancies × ${coinCostPerJobPost} coins)`,
         job._id,
         "job"
       );
@@ -292,7 +295,9 @@ export const createRecruiterJob = asyncHandler(async (req, res) => {
     },
     coinTransaction: coinTransaction
       ? {
-        amount: coinCostPerJobPost,
+        totalAmount: totalCoinCost,
+        coinPerVacancy: coinCostPerJobPost,
+        vacancyCount: vacancyCount,
         balanceAfter,
         description: coinTransaction.description,
       }
@@ -1017,11 +1022,43 @@ export const deactivateJob = asyncHandler(async (req, res) => {
 
 
 
-/* Repost Job By Recruter */
-
+/* Repost Job By Recruiter */
+/**
+ * Repost a closed job with optional modifications
+ * - Deducts coins based on vacancyCount (same as createRecruiterJob)
+ * - Allows editing all job details
+ * - Creates a new job entry linked to the original
+ */
 export const repostJob = asyncHandler(async (req, res) => {
   const recruiter = req.recruiter;
   const { jobId } = req.params;
+
+  // Editable fields from request body
+  const {
+    jobTitle,
+    jobDescription,
+    city,
+    expectedSalaryMin,
+    expectedSalaryMax,
+    salaryCurrency,
+    salaryPayPeriod,
+    employeeCount,
+    vacancyCount,
+    jobType,
+    employmentMode,
+    jobSeekerCategory,
+    categories,
+    tags,
+    skills,
+    benefits,
+    experienceMinYears,
+    experienceMaxYears,
+    preferredAgeMin,
+    preferredAgeMax,
+    qualifications,
+    responsibilities,
+    aboutCompany,
+  } = req.body;
 
   if (!mongoose.Types.ObjectId.isValid(jobId)) {
     throw new ApiError(400, "Invalid job ID format");
@@ -1039,77 +1076,159 @@ export const repostJob = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Only closed jobs can be reposted");
   }
 
-  // Convert to plain object and remove internal fields
-  const cloned = oldJob.toObject({ depopulate: true });
-  delete cloned._id;
-  delete cloned.__v;
-  delete cloned.createdAt;
-  delete cloned.updatedAt;
+  // Determine final vacancy count (from body or original job)
+  const finalVacancyCount = vacancyCount || oldJob.vacancyCount || 1;
 
-  // Reset counters & relations we don't want to carry over
-  cloned.applicationCount = 0;
-  if ("applicants" in cloned) delete cloned.applicants;
-  cloned.repostedFrom = oldJob._id;
-  cloned.recruiter = recruiter._id;
+  // Fetch coin cost for job posting (per vacancy)
+  const coinRule = await CoinRule.findOne({ category: "recruiter" });
+  const coinCostPerJobPost = coinRule?.coinCostPerJobPost || 0;
+  
+  // Calculate total coin cost based on vacancy count
+  const totalCoinCost = coinCostPerJobPost * finalVacancyCount;
 
-  // Handle salary field differences
-  const schemaPaths = RecruiterJob.schema.paths;
-
-  if (schemaPaths["expectedSalary"]) {
-    if (!cloned.expectedSalary) {
-      if (cloned.expectedSalaryMin && cloned.expectedSalaryMax) {
-        cloned.expectedSalary = {
-          min: cloned.expectedSalaryMin,
-          max: cloned.expectedSalaryMax,
-        };
-      }
-    }
-  } else {
-    if (!("expectedSalaryMin" in cloned) && cloned.expectedSalary) {
-      if (typeof cloned.expectedSalary === "object") {
-        cloned.expectedSalaryMin = cloned.expectedSalary.min ?? cloned.expectedSalaryMin;
-        cloned.expectedSalaryMax = cloned.expectedSalary.max ?? cloned.expectedSalaryMax;
-      }
-    }
-  }
-
-  // Ensure status is a valid enum
-  let statusEnum = [];
-  if (RecruiterJob.schema.path("status") && RecruiterJob.schema.path("status").enumValues) {
-    statusEnum = RecruiterJob.schema.path("status").enumValues;
-  }
-
-  // Force reposted job to become Active/Open
-  if (statusEnum.length > 0) {
-    if (statusEnum.includes("Active")) {
-      cloned.status = "Active";
-    } else if (statusEnum.includes("Open")) {
-      cloned.status = "Open";
-    } else {
-      cloned.status = statusEnum[0]; // fallback
-    }
-  } else {
-    cloned.status = "Active";
-  }
-
-
-  // Ensure fresh createdAt
-  delete cloned.createdAt;
-
-  try {
-    const newJob = await RecruiterJob.create(cloned);
-    return res.status(201).json(
-      ApiResponse.success(
-        { oldJobId: oldJob._id, newJob },
-        "Job reposted successfully"
-      )
+  // Check coin balance if coin cost is set
+  if (totalCoinCost > 0) {
+    const balanceCheck = await checkCoinBalance(
+      recruiter._id,
+      "recruiter",
+      totalCoinCost
     );
+
+    if (!balanceCheck.hasSufficientBalance) {
+      // Send low balance notification
+      try {
+        await fcmService.sendToUser(recruiter._id, "Recruiter", {
+          title: "⚠️ Low Coin Balance",
+          body: `You need ${totalCoinCost} coins to repost this job (${coinCostPerJobPost} × ${finalVacancyCount} vacancies). Current balance: ${balanceCheck.currentBalance} coins. Purchase more coins!`,
+          data: { type: "low_coin_balance", requiredCoins: String(totalCoinCost), currentBalance: String(balanceCheck.currentBalance) }
+        });
+
+        await Notification.create({
+          title: "⚠️ Low Coin Balance",
+          body: `You need ${totalCoinCost} coins to repost this job (${coinCostPerJobPost} × ${finalVacancyCount} vacancies). Current balance: ${balanceCheck.currentBalance} coins. Purchase more coins!`,
+          recipientType: "specific",
+          recipients: [{ userId: recruiter._id, userType: "Recruiter", status: "sent", sentAt: new Date() }],
+          data: { type: "low_coin_balance", requiredCoins: String(totalCoinCost), currentBalance: String(balanceCheck.currentBalance) },
+          status: "sent",
+          sentAt: new Date()
+        });
+      } catch (err) {
+        console.error("Failed to send low balance notification:", err.message);
+      }
+
+      throw new ApiError(
+        400,
+        `Insufficient coin balance. Required: ${totalCoinCost} coins (${coinCostPerJobPost} × ${finalVacancyCount} vacancies), Available: ${balanceCheck.currentBalance} coins. Please purchase more coins.`
+      );
+    }
+  }
+
+  // Build new job data from old job, overriding with new values if provided
+  const normalizeArray = (value, fallback) => {
+    if (value === undefined) return fallback || [];
+    return Array.isArray(value) ? value : [value];
+  };
+
+  const newJobData = {
+    recruiter: recruiter._id,
+    repostedFrom: oldJob._id,
+    status: "Open",
+    applicationCount: 0,
+
+    // Use new values if provided, otherwise use old values
+    jobTitle: jobTitle || oldJob.jobTitle,
+    jobDescription: jobDescription || oldJob.jobDescription,
+    city: city || oldJob.city,
+    expectedSalary: {
+      min: expectedSalaryMin || oldJob.expectedSalary?.min,
+      max: expectedSalaryMax || oldJob.expectedSalary?.max,
+      currency: salaryCurrency || oldJob.expectedSalary?.currency || "INR",
+      payPeriod: salaryPayPeriod || oldJob.expectedSalary?.payPeriod || "monthly",
+    },
+    employeeCount: employeeCount !== undefined ? employeeCount : oldJob.employeeCount,
+    vacancyCount: finalVacancyCount,
+    jobType: jobType || oldJob.jobType,
+    employmentMode: employmentMode || oldJob.employmentMode,
+    jobSeekerCategory: jobSeekerCategory || oldJob.jobSeekerCategory,
+    categories: categories ? normalizeArray(categories) : oldJob.categories,
+    tags: tags ? normalizeArray(tags) : oldJob.tags,
+    skills: skills ? normalizeArray(skills) : oldJob.skills,
+    benefits: benefits || oldJob.benefits,
+    experienceRange: {
+      minYears: experienceMinYears !== undefined ? experienceMinYears : oldJob.experienceRange?.minYears,
+      maxYears: experienceMaxYears !== undefined ? experienceMaxYears : oldJob.experienceRange?.maxYears,
+    },
+    preferredAgeRange: (preferredAgeMin !== undefined || preferredAgeMax !== undefined)
+      ? {
+        minAge: preferredAgeMin !== undefined ? preferredAgeMin : oldJob.preferredAgeRange?.minAge,
+        maxAge: preferredAgeMax !== undefined ? preferredAgeMax : oldJob.preferredAgeRange?.maxAge,
+      }
+      : oldJob.preferredAgeRange,
+    qualifications: qualifications ? normalizeArray(qualifications) : oldJob.qualifications,
+    responsibilities: responsibilities ? normalizeArray(responsibilities) : oldJob.responsibilities,
+    companySnapshot: aboutCompany || oldJob.companySnapshot,
+  };
+
+  // Create the new job
+  let newJob;
+  try {
+    newJob = await RecruiterJob.create(newJobData);
   } catch (err) {
     if (err.name === "ValidationError") {
-      throw new ApiError(400, `RecruiterJob validation failed: ${err.message}`);
+      throw new ApiError(400, `Job validation failed: ${err.message}`);
     }
     throw err;
   }
+
+  // Deduct coins after successful job creation
+  let coinTransaction = null;
+  let balanceAfter = null;
+  if (totalCoinCost > 0) {
+    try {
+      const deductionResult = await deductCoins(
+        recruiter._id,
+        "recruiter",
+        totalCoinCost,
+        `Repost Job: ${newJob.jobTitle} (${finalVacancyCount} vacancies × ${coinCostPerJobPost} coins)`,
+        newJob._id,
+        "job"
+      );
+      coinTransaction = deductionResult.transaction;
+      balanceAfter = deductionResult.balanceAfter;
+    } catch (error) {
+      // If coin deduction fails, delete the new job and throw error
+      await RecruiterJob.findByIdAndDelete(newJob._id);
+      throw error;
+    }
+  }
+
+  // Notify matching job seekers (background)
+  const jobSkills = newJob.skills || [];
+  if (jobSkills.length > 0) {
+    notifyMatchingJobSeekers(newJob._id, jobSkills, newJob.jobTitle);
+  }
+
+  return res.status(201).json(
+    ApiResponse.success(
+      {
+        oldJobId: oldJob._id,
+        newJob: {
+          ...newJob.toObject(),
+          jobId: newJob._id,
+        },
+        coinTransaction: coinTransaction
+          ? {
+            totalAmount: totalCoinCost,
+            coinPerVacancy: coinCostPerJobPost,
+            vacancyCount: finalVacancyCount,
+            balanceAfter,
+            description: coinTransaction.description,
+          }
+          : null,
+      },
+      "Job reposted successfully"
+    )
+  );
 });
 
 

@@ -129,6 +129,13 @@ const jobSeekerSchema = new Schema(
       default: false,
     },
 
+    // Year of Experience (e.g., "1 year", "2 years", "3.5 years")
+    yearOfExperience: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+
     // About Me Section
     aboutMe: {
       type: String,

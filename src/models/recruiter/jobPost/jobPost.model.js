@@ -117,7 +117,7 @@ const recruiterJobSchema = new Schema(
     },
     jobType: {
       type: String,
-      enum: ["Full Time", "Part Time", "Contract"],
+      enum: ["Full Time", "Part Time", "Contract Based"],
       required: true,
       index: true,
     },

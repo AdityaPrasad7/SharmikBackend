@@ -10,17 +10,17 @@ const benefitsSchema = Joi.object({
   .required()
   .custom((value, helpers) => {
     // At least one facility must be selected (true)
-    const hasFacility = 
-      value.foodProvided === true || 
-      value.accommodationProvided === true || 
+    const hasFacility =
+      value.foodProvided === true ||
+      value.accommodationProvided === true ||
       value.travelFacility === true;
-    
+
     if (!hasFacility) {
       return helpers.error("any.custom", {
         message: "At least one facility must be selected",
       });
     }
-    
+
     return value;
   })
   .messages({
@@ -53,8 +53,7 @@ export const createRecruiterJobSchema = Joi.object({
     }),
   salaryCurrency: Joi.string().trim().default("INR"),
   salaryPayPeriod: Joi.string().valid("monthly", "annual").default("monthly"),
-  employeeCount: Joi.number().integer().min(1).required().messages({
-    "any.required": "Employee count is required",
+  employeeCount: Joi.number().integer().min(1).optional().messages({
     "number.base": "Employee count must be a number",
     "number.integer": "Employee count must be an integer",
     "number.min": "Employee count must be at least 1",
@@ -65,9 +64,9 @@ export const createRecruiterJobSchema = Joi.object({
     "number.integer": "Vacancy count must be an integer",
     "number.min": "Vacancy count must be at least 1",
   }),
-  jobType: Joi.string().valid("Full Time", "Part Time", "Contract").required().messages({
+  jobType: Joi.string().valid("Full Time", "Part Time", "Contract Based").required().messages({
     "any.required": "Job type is required",
-    "any.only": "Job type must be one of: Full Time, Part Time, Contract",
+    "any.only": "Job type must be one of: Full Time, Part Time, Contract Based",
   }),
   employmentMode: Joi.string().valid("Onsite", "Remote", "Hybrid").default("Onsite"),
   jobSeekerCategory: Joi.string()

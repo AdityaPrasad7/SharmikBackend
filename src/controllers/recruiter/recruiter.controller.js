@@ -144,12 +144,17 @@ export const registerRecruiter = asyncHandler(async (req, res) => {
   const {
     phone,
     recruiterId,
+    name,
     companyName,
     email,
     state,
     city,
     stateId,
     cityId,
+    website,
+    businessType,
+    establishedFrom,
+    aboutMe,
   } = req.body;
 
   const identifier = recruiterId
@@ -183,6 +188,9 @@ export const registerRecruiter = asyncHandler(async (req, res) => {
     : [];
 
   // Update recruiter basic info
+  if (name !== undefined) {
+    recruiter.name = name?.trim() || null;
+  }
   recruiter.companyName = companyName || recruiter.companyName;
   recruiter.email = email || recruiter.email;
 
@@ -212,6 +220,21 @@ export const registerRecruiter = asyncHandler(async (req, res) => {
     recruiter.state = state || recruiter.state;
     recruiter.city = city || recruiter.city;
   }
+
+  // Update additional business info
+  if (website !== undefined) {
+    recruiter.website = website?.trim() || null;
+  }
+  if (businessType !== undefined) {
+    recruiter.businessType = businessType?.trim() || null;
+  }
+  if (establishedFrom !== undefined) {
+    recruiter.establishedFrom = establishedFrom ? Number(establishedFrom) : null;
+  }
+  if (aboutMe !== undefined) {
+    recruiter.aboutMe = aboutMe?.trim() || null;
+  }
+
   if (companyLogo) {
     recruiter.companyLogo = companyLogo;
     recruiter.profilePhoto = companyLogo;
