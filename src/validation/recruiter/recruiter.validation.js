@@ -53,6 +53,19 @@ const cityIdSchema = Joi.string()
     "string.pattern.base": "Invalid city ID",
   });
 
+// Referral Code Schema (8-character alphanumeric, optional)
+const referralCodeSchema = Joi.string()
+  .alphanum()
+  .min(6)
+  .max(10)
+  .uppercase()
+  .optional()
+  .messages({
+    "string.alphanum": "Referral code must contain only letters and numbers",
+    "string.min": "Referral code must be at least 6 characters",
+    "string.max": "Referral code must be at most 10 characters",
+  });
+
 // Recruiter Registration Schema (basic for now)
 export const recruiterRegistrationSchema = Joi.object({
   phone: phoneSchema.optional(),
@@ -78,6 +91,8 @@ export const recruiterRegistrationSchema = Joi.object({
       "number.min": "Established from must be greater than or equal to 1800",
       "number.max": "Established from cannot be in the far future",
     }),
+  aboutMe: Joi.string().trim().max(2000).optional().allow(""),
+  referralCode: referralCodeSchema,
 }).or("phone", "recruiterId");
 
 // Update Recruiter Profile Schema

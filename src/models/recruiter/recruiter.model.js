@@ -92,6 +92,12 @@ const recruiterSchema = new Schema(
       default: "Pending",
     },
 
+    // Block Status
+    isBlocked: {
+      type: Boolean,
+      default: false,
+    },
+
     // Coin Balance
     coinBalance: {
       type: Number,
@@ -110,6 +116,24 @@ const recruiterSchema = new Schema(
     fcmTokens: {
       type: [String],
       default: [],
+    },
+
+    // Referral System
+    referralCode: {
+      type: String,
+      unique: true,
+      sparse: true, // Allows null values while maintaining uniqueness
+      index: true,
+    },
+    referredBy: {
+      type: Schema.Types.ObjectId,
+      ref: "Recruiter",
+      default: null,
+    },
+    totalReferrals: {
+      type: Number,
+      default: 0,
+      min: 0,
     },
 
     // Authentication

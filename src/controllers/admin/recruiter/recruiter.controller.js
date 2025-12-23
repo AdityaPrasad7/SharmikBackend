@@ -320,3 +320,168 @@ export const getRecruiterActivity = asyncHandler(async (req, res) => {
         )
     );
 });
+
+/**
+ * Get All Recruiters with comprehensive filters
+ * 
+ * Query params:
+ * - page: Page number (default: 1)
+ * - limit: Items per page (default: 20)
+ * - search: Search by company name, name, phone, email
+ * - status: Filter by status (Active, Inactive, Pending, Rejected)
+ * - isBlocked: Filter by blocked status (true, false)
+ */
+export const getAllRecruiters = asyncHandler(async (req, res) => {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const skip = (page - 1) * limit;
+    const { search, status, isBlocked } = req.query;
+
+    // Build query
+    const query = {};
+
+    // Search filter
+    if (search) {
+        query.$or = [
+            { companyName: { $regex: search, $options: "i" } },
+            { name: { $regex: search, $options: "i" } },
+            { phone: { $regex: search, $options: "i" } },
+            { email: { $regex: search, $options: "i" } },
+        ];
+    }
+
+    // Status filter
+    if (status && status !== "All") {
+        query.status = status;
+    }
+
+    // Blocked filter
+    if (isBlocked !== undefined && isBlocked !== "") {
+        query.isBlocked = isBlocked === "true";
+    }
+
+    // Get total count
+    const totalCount = await Recruiter.countDocuments(query);
+    const totalPages = Math.ceil(totalCount / limit);
+
+    // Get recruiters
+    const recruiters = await Recruiter.find(query)
+        .select("companyName name phone email businessType status isBlocked companyLogo createdAt updatedAt coinBalance")
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean();
+
+    // Format response
+    const formattedRecruiters = recruiters.map(r => ({
+        _id: r._id,
+        companyName: r.companyName || "Unknown Company",
+        name: r.name || "Unknown",
+        phone: r.phone,
+        email: r.email,
+        businessType: r.businessType || "Not specified",
+        status: r.status,
+        isBlocked: r.isBlocked || false,
+        companyLogo: r.companyLogo,
+        coinBalance: r.coinBalance || 0,
+        createdAt: r.createdAt,
+        updatedAt: r.updatedAt,
+    }));
+
+    return res.status(200).json(
+        ApiResponse.success(
+            {
+                recruiters: formattedRecruiters,
+                pagination: {
+                    currentPage: page,
+                    totalPages,
+                    totalCount,
+                    limit,
+                    hasNextPage: page < totalPages,
+                    hasPrevPage: page > 1,
+                },
+            },
+            "Recruiters fetched successfully"
+        )
+    );
+});
+
+/**
+ * Block a Recruiter
+ */
+export const blockRecruiter = asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { reason } = req.body;
+
+    const recruiter = await Recruiter.findById(id);
+    if (!recruiter) {
+        return res.status(404).json(
+            ApiResponse.error("Recruiter not found")
+        );
+    }
+
+    if (recruiter.isBlocked) {
+        return res.status(400).json(
+            ApiResponse.error("Recruiter is already blocked")
+        );
+    }
+
+    recruiter.isBlocked = true;
+    recruiter.fcmTokens = []; // Clear FCM tokens to logout from all devices
+
+    await recruiter.save();
+
+    return res.status(200).json(
+        ApiResponse.success(
+            {
+                recruiter: {
+                    _id: recruiter._id,
+                    name: recruiter.name,
+                    companyName: recruiter.companyName,
+                    phone: recruiter.phone,
+                    isBlocked: recruiter.isBlocked,
+                }
+            },
+            "Recruiter blocked successfully"
+        )
+    );
+});
+
+/**
+ * Unblock a Recruiter
+ */
+export const unblockRecruiter = asyncHandler(async (req, res) => {
+    const { id } = req.params;
+
+    const recruiter = await Recruiter.findById(id);
+    if (!recruiter) {
+        return res.status(404).json(
+            ApiResponse.error("Recruiter not found")
+        );
+    }
+
+    if (!recruiter.isBlocked) {
+        return res.status(400).json(
+            ApiResponse.error("Recruiter is not blocked")
+        );
+    }
+
+    recruiter.isBlocked = false;
+
+    await recruiter.save();
+
+    return res.status(200).json(
+        ApiResponse.success(
+            {
+                recruiter: {
+                    _id: recruiter._id,
+                    name: recruiter.name,
+                    companyName: recruiter.companyName,
+                    phone: recruiter.phone,
+                    isBlocked: recruiter.isBlocked,
+                }
+            },
+            "Recruiter unblocked successfully"
+        )
+    );
+});

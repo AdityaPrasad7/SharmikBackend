@@ -75,6 +75,29 @@ const coinRuleSchema = new Schema(
       default: 0,
       min: 0,
     },
+
+    // Referral Settings (Admin controlled)
+    referralSettings: {
+      isEnabled: {
+        type: Boolean,
+        default: true,
+      },
+      referrerCoins: {
+        type: Number,
+        default: 50, // Coins given to the person who referred
+        min: 0,
+      },
+      refereeCoins: {
+        type: Number,
+        default: 20, // Coins given to the new user who signed up
+        min: 0,
+      },
+      maxReferralsPerUser: {
+        type: Number,
+        default: 0, // 0 = unlimited
+        min: 0,
+      },
+    },
   },
   { timestamps: true }
 );

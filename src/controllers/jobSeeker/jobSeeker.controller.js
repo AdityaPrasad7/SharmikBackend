@@ -12,6 +12,10 @@ import { asyncHandler } from "../../utils/asyncHandler.js";
 import { storeOTP, verifyOTP as verifyOTPFromService } from "../../utils/otpService.js";
 import { getFileUrl } from "../../middlewares/fileUpload.js";
 import { generateAccessToken, generateRefreshToken, verifyRefreshToken } from "../../utils/jwtToken.js";
+import { generateUniqueReferralCode, validateReferralCode } from "../../utils/referralCode.js";
+import { Referral } from "../../models/referral/referral.model.js";
+import { CoinRule } from "../../models/admin/coinPricing/coinPricing.model.js";
+import { addCoins } from "../../services/coin/coinService.js";
 
 /**
  * Send OTP for mobile verification
@@ -117,6 +121,7 @@ export const sendOTP = asyncHandler(async (req, res) => {
  * Smart verification:
  * - If user exists: Login flow (category optional, can update if provided)
  * - If user doesn't exist: Registration flow (category required)
+ * Note: Referral code processing happens in registration APIs, not here
  */
 export const verifyOTP = asyncHandler(async (req, res) => {
   const { phone, otp, category } = req.body;
@@ -130,6 +135,7 @@ export const verifyOTP = asyncHandler(async (req, res) => {
   // Check if user exists to determine OTP purpose
   let jobSeeker = await JobSeeker.findOne({ phone });
   const purpose = jobSeeker ? "login" : "registration";
+  const isNewUser = !jobSeeker;
 
   // Verify OTP with correct purpose
   const isValid = await verifyOTPFromService(phone, otp, purpose);
@@ -137,17 +143,21 @@ export const verifyOTP = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Invalid or expired OTP");
   }
 
-  if (!jobSeeker) {
+  if (isNewUser) {
     // New user - Registration flow: category is REQUIRED
     if (!category) {
       throw new ApiError(400, "Category is required for new user registration");
     }
+
+    // Generate unique referral code for new user
+    const newUserReferralCode = await generateUniqueReferralCode("JobSeeker");
 
     jobSeeker = await JobSeeker.create({
       phone,
       phoneVerified: true,
       category,
       registrationStep: 1,
+      referralCode: newUserReferralCode,
     });
   } else {
     // Existing user - Login flow: category is optional
@@ -161,6 +171,11 @@ export const verifyOTP = asyncHandler(async (req, res) => {
       if (jobSeeker.registrationStep > 1) {
         jobSeeker.registrationStep = 1;
       }
+    }
+
+    // Ensure existing users have a referral code
+    if (!jobSeeker.referralCode) {
+      jobSeeker.referralCode = await generateUniqueReferralCode("JobSeeker");
     }
 
     await jobSeeker.save();
@@ -182,17 +197,21 @@ export const verifyOTP = asyncHandler(async (req, res) => {
   jobSeeker.refreshToken = refreshToken;
   await jobSeeker.save({ select: "+refreshToken" }); // Include refreshToken field
 
+  // Re-fetch to get updated coin balance
+  const updatedJobSeeker = await JobSeeker.findById(jobSeeker._id).lean();
+
   // Prepare safe job seeker data (exclude sensitive fields)
   const safeJobSeeker = {
-    _id: jobSeeker._id,
-    phone: jobSeeker.phone,
-    phoneVerified: jobSeeker.phoneVerified,
-    category: jobSeeker.category,
-    role: jobSeeker.role,
-    registrationStep: jobSeeker.registrationStep,
-    isRegistrationComplete: jobSeeker.isRegistrationComplete,
-    status: jobSeeker.status,
-    // Include other safe fields as needed
+    _id: updatedJobSeeker._id,
+    phone: updatedJobSeeker.phone,
+    phoneVerified: updatedJobSeeker.phoneVerified,
+    category: updatedJobSeeker.category,
+    role: updatedJobSeeker.role,
+    registrationStep: updatedJobSeeker.registrationStep,
+    isRegistrationComplete: updatedJobSeeker.isRegistrationComplete,
+    status: updatedJobSeeker.status,
+    referralCode: updatedJobSeeker.referralCode,
+    coinBalance: updatedJobSeeker.coinBalance || 0,
   };
 
   // Set refresh token as HTTP-only cookie (optional, for web apps)
@@ -223,7 +242,7 @@ export const verifyOTP = asyncHandler(async (req, res) => {
  * Supports both state/city names and stateId/cityId from dropdowns
  */
 export const registerNonDegree = asyncHandler(async (req, res) => {
-  const { phone, name, email, gender, dateOfBirth, state, city, stateId, cityId, specializationId, selectedSkills } = req.body;
+  const { phone, name, email, gender, dateOfBirth, state, city, stateId, cityId, specializationId, selectedSkills, referralCode } = req.body;
 
   // ✅ NORMALIZE selectedSkills (FIX FLUTTER FORM-DATA BUG)
   let finalSelectedSkills = normalizeSkills(selectedSkills);
@@ -332,8 +351,75 @@ export const registerNonDegree = asyncHandler(async (req, res) => {
 
   await jobSeeker.save();
 
+  // Process referral code if provided and not already referred
+  let referralInfo = null;
+  if (referralCode && !jobSeeker.referredBy) {
+    try {
+      const validation = await validateReferralCode(referralCode);
+      if (validation.isValid) {
+        const referrerUser = validation.referrer;
+        const referrerType = validation.referrerType;
+
+        const coinRule = await CoinRule.findOne({ category: "jobSeeker" });
+        const referralSettings = coinRule?.referralSettings || {};
+        const isReferralEnabled = referralSettings.isEnabled !== false;
+        const referrerCoins = referralSettings.referrerCoins || 50;
+        const maxReferrals = referralSettings.maxReferralsPerUser || 0;
+
+        if (isReferralEnabled) {
+          const referrerModel = referrerType === "Recruiter" ? Recruiter : JobSeeker;
+          const referrerDoc = await referrerModel.findById(referrerUser._id);
+          const currentReferrals = referrerDoc?.totalReferrals || 0;
+          const canReward = maxReferrals === 0 || currentReferrals < maxReferrals;
+
+          if (canReward) {
+            const referral = await Referral.create({
+              referrer: referrerUser._id,
+              referrerType: referrerType,
+              referee: jobSeeker._id,
+              refereeType: "JobSeeker",
+              referralCode: referralCode.toUpperCase(),
+              status: "completed",
+              referrerCoinsAwarded: referrerCoins,
+              refereeCoinsAwarded: 0,
+            });
+
+            await addCoins(
+              referrerUser._id,
+              referrerType.toLowerCase() === "recruiter" ? "recruiter" : "jobSeeker",
+              referrerCoins,
+              `Referral reward: New user ${phone} signed up using your code`,
+              referral._id,
+              "referral"
+            );
+
+            await referrerModel.findByIdAndUpdate(referrerUser._id, {
+              $inc: { totalReferrals: 1 },
+            });
+
+            jobSeeker.referredBy = referrerUser._id;
+            await jobSeeker.save();
+
+            referral.status = "rewarded";
+            await referral.save();
+
+            referralInfo = {
+              referredBy: referrerUser._id,
+              referrerType,
+              referrerCoinsAwarded: referrerCoins,
+            };
+
+            console.log(`✅ Referral completed: ${phone} referred by ${referrerUser._id} (${referrerType})`);
+          }
+        }
+      }
+    } catch (refErr) {
+      console.error("❌ Referral processing error:", refErr.message);
+    }
+  }
+
   return res.status(200).json(
-    ApiResponse.success({ jobSeeker }, "Registration completed successfully")
+    ApiResponse.success({ jobSeeker, referral: referralInfo }, "Registration completed successfully")
   );
 });
 
@@ -341,9 +427,10 @@ export const registerNonDegree = asyncHandler(async (req, res) => {
 
 /**
  * Step 1 Registration (Diploma/ITI Holder) - Upload Aadhaar and Profile Photo
+ * Also processes referral code if provided
  */
 export const step1Registration = asyncHandler(async (req, res) => {
-  const { phone, name, email, gender, dateOfBirth } = req.body;
+  const { phone, name, email, gender, dateOfBirth, referralCode } = req.body;
 
   // Cross-table validation: Check if phone exists in Recruiter table
   const existingRecruiter = await Recruiter.findOne({ phone });
@@ -391,11 +478,78 @@ export const step1Registration = asyncHandler(async (req, res) => {
 
   await jobSeeker.save();
 
+  // Process referral code if provided and not already referred
+  let referralInfo = null;
+  if (referralCode && !jobSeeker.referredBy) {
+    try {
+      const validation = await validateReferralCode(referralCode);
+      if (validation.isValid) {
+        const referrerUser = validation.referrer;
+        const referrerType = validation.referrerType;
+
+        const coinRule = await CoinRule.findOne({ category: "jobSeeker" });
+        const referralSettings = coinRule?.referralSettings || {};
+        const isReferralEnabled = referralSettings.isEnabled !== false;
+        const referrerCoins = referralSettings.referrerCoins || 50;
+        const maxReferrals = referralSettings.maxReferralsPerUser || 0;
+
+        if (isReferralEnabled) {
+          const referrerModel = referrerType === "Recruiter" ? Recruiter : JobSeeker;
+          const referrerDoc = await referrerModel.findById(referrerUser._id);
+          const currentReferrals = referrerDoc?.totalReferrals || 0;
+          const canReward = maxReferrals === 0 || currentReferrals < maxReferrals;
+
+          if (canReward) {
+            const referral = await Referral.create({
+              referrer: referrerUser._id,
+              referrerType: referrerType,
+              referee: jobSeeker._id,
+              refereeType: "JobSeeker",
+              referralCode: referralCode.toUpperCase(),
+              status: "completed",
+              referrerCoinsAwarded: referrerCoins,
+              refereeCoinsAwarded: 0,
+            });
+
+            await addCoins(
+              referrerUser._id,
+              referrerType.toLowerCase() === "recruiter" ? "recruiter" : "jobSeeker",
+              referrerCoins,
+              `Referral reward: New user ${phone} signed up using your code`,
+              referral._id,
+              "referral"
+            );
+
+            await referrerModel.findByIdAndUpdate(referrerUser._id, {
+              $inc: { totalReferrals: 1 },
+            });
+
+            jobSeeker.referredBy = referrerUser._id;
+            await jobSeeker.save();
+
+            referral.status = "rewarded";
+            await referral.save();
+
+            referralInfo = {
+              referredBy: referrerUser._id,
+              referrerType,
+              referrerCoinsAwarded: referrerCoins,
+            };
+
+            console.log(`✅ Referral completed: ${phone} referred by ${referrerUser._id} (${referrerType})`);
+          }
+        }
+      }
+    } catch (refErr) {
+      console.error("❌ Referral processing error:", refErr.message);
+    }
+  }
+
   return res
     .status(200)
     .json(
       ApiResponse.success(
-        { jobSeeker },
+        { jobSeeker, referral: referralInfo },
         "Step 1 completed successfully"
       )
     );

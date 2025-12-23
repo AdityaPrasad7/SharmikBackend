@@ -159,6 +159,12 @@ const jobSeekerSchema = new Schema(
       default: "Active",
     },
 
+    // Block Status
+    isBlocked: {
+      type: Boolean,
+      default: false,
+    },
+
     // Coin Balance
     coinBalance: {
       type: Number,
@@ -170,6 +176,24 @@ const jobSeekerSchema = new Schema(
     fcmTokens: {
       type: [String],
       default: [],
+    },
+
+    // Referral System
+    referralCode: {
+      type: String,
+      unique: true,
+      sparse: true, // Allows null values while maintaining uniqueness
+      index: true,
+    },
+    referredBy: {
+      type: Schema.Types.ObjectId,
+      ref: "JobSeeker",
+      default: null,
+    },
+    totalReferrals: {
+      type: Number,
+      default: 0,
+      min: 0,
     },
 
     // Authentication

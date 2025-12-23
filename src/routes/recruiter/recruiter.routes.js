@@ -8,6 +8,7 @@ import {
   logoutRecruiter,
   getRecruiterProfile,
   updateRecruiterProfile,
+  getWebsiteTypes,
 } from "../../controllers/recruiter/recruiter.controller.js";
 import {
   getJobCategories,
@@ -35,6 +36,9 @@ import {
   getAllShortlistedCandidates,
 } from "../../controllers/recruiter/application/application.controller.js";
 const router = Router();
+
+// Public endpoint - Get all website types (no authentication required)
+router.get("/website-types", getWebsiteTypes);
 
 // OTP Routes
 router.post(

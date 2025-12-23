@@ -8,6 +8,9 @@ import {
   getTransactionHistory,
 } from "../../services/coin/coinService.js";
 import { CoinPackage, CoinRule } from "../../models/admin/coinPricing/coinPricing.model.js";
+import { Recruiter } from "../../models/recruiter/recruiter.model.js";
+import { Referral } from "../../models/referral/referral.model.js";
+import { ensureReferralCode } from "../../utils/referralCode.js";
 
 /**
  * Get current coin balance
@@ -277,3 +280,72 @@ export const getCoinsPerRupeeRate = asyncHandler(async (req, res) => {
   );
 });
 
+/**
+ * Get my referral code
+ * Returns the unique referral code for the authenticated recruiter
+ */
+export const getMyReferralCode = asyncHandler(async (req, res) => {
+  const recruiter = await Recruiter.findById(req.recruiter._id);
+
+  // Ensure user has a referral code
+  const referralCode = await ensureReferralCode(recruiter, "Recruiter");
+
+  return res.status(200).json(
+    ApiResponse.success(
+      {
+        referralCode,
+        shareMessage: `Join Shramik and get free coins! Use my referral code: ${referralCode}`,
+      },
+      "Referral code retrieved successfully"
+    )
+  );
+});
+
+/**
+ * Get referral stats
+ * Returns referral statistics for the authenticated recruiter
+ */
+export const getReferralStats = asyncHandler(async (req, res) => {
+  const recruiter = await Recruiter.findById(req.recruiter._id);
+
+  // Get all referrals made by this user
+  const referrals = await Referral.find({
+    referrer: recruiter._id,
+    referrerType: "Recruiter",
+  })
+    .populate("referee", "companyName phone")
+    .sort({ createdAt: -1 })
+    .lean();
+
+  // Calculate stats
+  const totalReferrals = referrals.length;
+  const rewardedReferrals = referrals.filter((r) => r.status === "rewarded").length;
+  const totalCoinsEarned = referrals.reduce((sum, r) => sum + (r.referrerCoinsAwarded || 0), 0);
+
+  // Get referral settings
+  const coinRule = await CoinRule.findOne({ category: "recruiter" });
+  const referralSettings = coinRule?.referralSettings || {};
+  const coinsPerReferral = referralSettings.referrerCoins || 50;
+  const maxReferrals = referralSettings.maxReferralsPerUser || 0;
+
+  return res.status(200).json(
+    ApiResponse.success(
+      {
+        referralCode: recruiter.referralCode,
+        totalReferrals,
+        rewardedReferrals,
+        totalCoinsEarned,
+        coinsPerReferral,
+        maxReferrals: maxReferrals === 0 ? "Unlimited" : maxReferrals,
+        referrals: referrals.map((r) => ({
+          id: r._id,
+          refereePhone: r.referee?.phone || "Unknown",
+          coinsAwarded: r.referrerCoinsAwarded,
+          status: r.status,
+          createdAt: r.createdAt,
+        })),
+      },
+      "Referral stats retrieved successfully"
+    )
+  );
+});

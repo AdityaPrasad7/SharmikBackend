@@ -8,6 +8,8 @@ import {
   verifyPayment,
   calculateCoinsForAmount,
   getCoinsPerRupeeRate,
+  getMyReferralCode,
+  getReferralStats,
 } from "../../controllers/recruiter/coin.controller.js";
 import { verifyRecruiterJWT } from "../../middlewares/recruiter/authRecruiter.js";
 
@@ -34,6 +36,10 @@ router.get("/rate", getCoinsPerRupeeRate);
 // Calculate coins for a custom amount
 router.get("/calculate", calculateCoinsForAmount);
 
+// Referral APIs
+router.get("/referral/my-code", getMyReferralCode);
+router.get("/referral/stats", getReferralStats);
+
 // Purchase coins (MOCK)
 router.post("/purchase", purchaseCoins);
 
@@ -41,4 +47,3 @@ router.post("/purchase", purchaseCoins);
 router.post("/verify-payment", verifyPayment);
 
 export default router;
-

@@ -8,6 +8,7 @@ import {
   generateAccessToken,
   generateRefreshToken,
 } from "../../utils/jwtToken.js";
+import { generateUniqueReferralCode } from "../../utils/referralCode.js";
 
 /**
  * Unified Send OTP - Automatically detects user type (job-seeker or recruiter)
@@ -115,6 +116,14 @@ export const verifyOTP = asyncHandler(async (req, res) => {
     }
   }
 
+  // Check if existing user is blocked
+  if (existingJobSeeker && existingJobSeeker.isBlocked) {
+    throw new ApiError(403, "Your account has been blocked. Please contact support.");
+  }
+  if (existingRecruiter && existingRecruiter.isBlocked) {
+    throw new ApiError(403, "Your account has been blocked. Please contact support.");
+  }
+
   // Verify OTP with correct purpose
   const isValid = await verifyOTPFromService(phone, otp, purpose);
   if (!isValid) {
@@ -143,11 +152,15 @@ const handleJobSeekerVerification = async (req, res, jobSeeker, phone, category,
 
     // Create job seeker with only the required fields for OTP verification
     // Explicitly set fields to avoid any issues with extra fields from req.body
+    // Generate unique referral code for new user
+    const newUserReferralCode = await generateUniqueReferralCode("JobSeeker");
+
     const jobSeekerData = {
       phone: phone?.toString().trim(),
       phoneVerified: true,
       category: category?.toString().trim(),
       registrationStep: 1,
+      referralCode: newUserReferralCode,
     };
 
     jobSeeker = await JobSeeker.create(jobSeekerData);
@@ -163,6 +176,12 @@ const handleJobSeekerVerification = async (req, res, jobSeeker, phone, category,
       }
     }
 
+    await jobSeeker.save();
+  }
+
+  // Ensure user has a referral code
+  if (!jobSeeker.referralCode) {
+    jobSeeker.referralCode = await generateUniqueReferralCode("JobSeeker");
     await jobSeeker.save();
   }
 
@@ -206,6 +225,8 @@ const handleJobSeekerVerification = async (req, res, jobSeeker, phone, category,
     isRegistrationComplete: jobSeeker.isRegistrationComplete,
     status: jobSeeker.status,
     fcmTokens: updatedFcmTokens,
+    referralCode: jobSeeker.referralCode,
+    coinBalance: jobSeeker.coinBalance || 0,
   };
 
   // Set refresh token as HTTP-only cookie
@@ -237,11 +258,15 @@ const handleJobSeekerVerification = async (req, res, jobSeeker, phone, category,
 const handleRecruiterVerification = async (req, res, recruiter, phone, purpose, fcmToken) => {
   if (!recruiter) {
     // New recruiter - Registration flow
+    // Generate unique referral code for new user
+    const newUserReferralCode = await generateUniqueReferralCode("Recruiter");
+
     recruiter = await Recruiter.create({
       phone,
       phoneVerified: true,
       registrationStep: 1,
       role: "recruiter",
+      referralCode: newUserReferralCode,
     });
   } else {
     // Existing recruiter - Login flow
@@ -249,6 +274,12 @@ const handleRecruiterVerification = async (req, res, recruiter, phone, purpose, 
     if (recruiter.registrationStep < 1) {
       recruiter.registrationStep = 1;
     }
+    await recruiter.save();
+  }
+
+  // Ensure user has a referral code
+  if (!recruiter.referralCode) {
+    recruiter.referralCode = await generateUniqueReferralCode("Recruiter");
     await recruiter.save();
   }
 
@@ -288,6 +319,8 @@ const handleRecruiterVerification = async (req, res, recruiter, phone, purpose, 
     companyName: recruiter.companyName,
     role: recruiter.role,
     fcmTokens: updatedFcmTokens,
+    referralCode: recruiter.referralCode,
+    coinBalance: recruiter.coinBalance || 0,
   };
 
   const cookieOptions = {

@@ -23,6 +23,19 @@ const categorySchema = Joi.string()
   .valid("Non-Degree Holder", "Diploma Holder", "ITI Holder")
   .required();
 
+// Referral Code Schema (8-character alphanumeric, optional)
+const referralCodeSchema = Joi.string()
+  .alphanum()
+  .min(6)
+  .max(10)
+  .uppercase()
+  .optional()
+  .messages({
+    "string.alphanum": "Referral code must contain only letters and numbers",
+    "string.min": "Referral code must be at least 6 characters",
+    "string.max": "Referral code must be at most 10 characters",
+  });
+
 const stateSchema = Joi.string().trim().min(1).required();
 const citySchema = Joi.string().trim().min(1).required();
 
@@ -102,6 +115,7 @@ export const nonDegreeRegistrationSchema = Joi.object({
       "array.min": "At least one skill must be selected",
       "any.required": "Skills are required",
     }),
+  referralCode: referralCodeSchema,
 }).or("state", "stateId").or("city", "cityId").messages({
   "object.missing": "Either state/stateId and city/cityId are required",
 });
@@ -131,6 +145,7 @@ export const step1RegistrationSchema = Joi.object({
     "date.base": "Please provide a valid date of birth",
     "any.required": "Date of birth is required",
   }),
+  referralCode: referralCodeSchema,
   // category is optional - already set in verify-otp and stored in job seeker record
   // Files will be handled separately via multer
 });

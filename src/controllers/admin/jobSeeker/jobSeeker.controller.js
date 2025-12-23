@@ -295,6 +295,98 @@ export const getTopJobSeekers = asyncHandler(async (req, res) => {
 });
 
 /**
+ * Get All Job Seekers with comprehensive filters
+ * 
+ * Query params:
+ * - page: Page number (default: 1)
+ * - limit: Items per page (default: 20)
+ * - search: Search by name, phone, email
+ * - status: Filter by status (Active, Inactive, Pending, Rejected)
+ * - isBlocked: Filter by blocked status (true, false)
+ * - category: Filter by category
+ */
+export const getAllJobSeekers = asyncHandler(async (req, res) => {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const skip = (page - 1) * limit;
+    const { search, status, isBlocked, category } = req.query;
+
+    // Build query
+    const query = {};
+
+    // Search filter
+    if (search) {
+        query.$or = [
+            { name: { $regex: search, $options: "i" } },
+            { phone: { $regex: search, $options: "i" } },
+            { email: { $regex: search, $options: "i" } },
+        ];
+    }
+
+    // Status filter
+    if (status && status !== "All") {
+        query.status = status;
+    }
+
+    // Blocked filter
+    if (isBlocked !== undefined && isBlocked !== "") {
+        query.isBlocked = isBlocked === "true";
+    }
+
+    // Category filter
+    if (category && category !== "All") {
+        query.category = category;
+    }
+
+    // Get total count
+    const totalCount = await JobSeeker.countDocuments(query);
+    const totalPages = Math.ceil(totalCount / limit);
+
+    // Get job seekers
+    const jobSeekers = await JobSeeker.find(query)
+        .populate("specializationId", "name")
+        .select("name phone email gender category status isBlocked profilePhoto createdAt updatedAt coinBalance")
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean();
+
+    // Format response
+    const formattedJobSeekers = jobSeekers.map(js => ({
+        _id: js._id,
+        name: js.name || "Unknown",
+        phone: js.phone,
+        email: js.email,
+        gender: js.gender,
+        category: js.category,
+        specialization: js.specializationId?.name || "Not specified",
+        status: js.status,
+        isBlocked: js.isBlocked || false,
+        profilePhoto: js.profilePhoto,
+        coinBalance: js.coinBalance || 0,
+        createdAt: js.createdAt,
+        updatedAt: js.updatedAt,
+    }));
+
+    return res.status(200).json(
+        ApiResponse.success(
+            {
+                jobSeekers: formattedJobSeekers,
+                pagination: {
+                    currentPage: page,
+                    totalPages,
+                    totalCount,
+                    limit,
+                    hasNextPage: page < totalPages,
+                    hasPrevPage: page > 1,
+                },
+            },
+            "Job seekers fetched successfully"
+        )
+    );
+});
+
+/**
  * Get Job Seeker Categories for filter dropdown
  */
 export const getJobSeekerCategories = asyncHandler(async (req, res) => {
@@ -306,6 +398,84 @@ export const getJobSeekerCategories = asyncHandler(async (req, res) => {
                 categories: ["All", ...categories.filter(Boolean)]
             },
             "Categories fetched successfully"
+        )
+    );
+});
+
+/**
+ * Block a Job Seeker
+ */
+export const blockJobSeeker = asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { reason } = req.body;
+
+    const jobSeeker = await JobSeeker.findById(id);
+    if (!jobSeeker) {
+        return res.status(404).json(
+            ApiResponse.error("Job Seeker not found")
+        );
+    }
+
+    if (jobSeeker.isBlocked) {
+        return res.status(400).json(
+            ApiResponse.error("Job Seeker is already blocked")
+        );
+    }
+
+    jobSeeker.isBlocked = true;
+    jobSeeker.fcmTokens = []; // Clear FCM tokens to logout from all devices
+
+    await jobSeeker.save();
+
+    return res.status(200).json(
+        ApiResponse.success(
+            {
+                jobSeeker: {
+                    _id: jobSeeker._id,
+                    name: jobSeeker.name,
+                    phone: jobSeeker.phone,
+                    isBlocked: jobSeeker.isBlocked,
+                }
+            },
+            "Job Seeker blocked successfully"
+        )
+    );
+});
+
+/**
+ * Unblock a Job Seeker
+ */
+export const unblockJobSeeker = asyncHandler(async (req, res) => {
+    const { id } = req.params;
+
+    const jobSeeker = await JobSeeker.findById(id);
+    if (!jobSeeker) {
+        return res.status(404).json(
+            ApiResponse.error("Job Seeker not found")
+        );
+    }
+
+    if (!jobSeeker.isBlocked) {
+        return res.status(400).json(
+            ApiResponse.error("Job Seeker is not blocked")
+        );
+    }
+
+    jobSeeker.isBlocked = false;
+
+    await jobSeeker.save();
+
+    return res.status(200).json(
+        ApiResponse.success(
+            {
+                jobSeeker: {
+                    _id: jobSeeker._id,
+                    name: jobSeeker.name,
+                    phone: jobSeeker.phone,
+                    isBlocked: jobSeeker.isBlocked,
+                }
+            },
+            "Job Seeker unblocked successfully"
         )
     );
 });

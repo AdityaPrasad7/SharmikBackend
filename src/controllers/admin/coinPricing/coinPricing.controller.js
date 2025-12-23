@@ -22,6 +22,12 @@ const mapRule = (rule) => ({
   coinCostPerApplication: rule?.coinCostPerApplication ?? 0,
   coinPerEmployeeCount: rule?.coinPerEmployeeCount ?? 0,
   coinCostPerJobPost: rule?.coinCostPerJobPost ?? 0,
+  referralSettings: {
+    isEnabled: rule?.referralSettings?.isEnabled ?? true,
+    referrerCoins: rule?.referralSettings?.referrerCoins ?? 50,
+    refereeCoins: rule?.referralSettings?.refereeCoins ?? 20,
+    maxReferralsPerUser: rule?.referralSettings?.maxReferralsPerUser ?? 0,
+  },
 });
 
 const buildRuleUpdate = (body = {}) => {
@@ -40,6 +46,23 @@ const buildRuleUpdate = (body = {}) => {
   }
   if (body.coinCostPerJobPost !== undefined) {
     update.coinCostPerJobPost = body.coinCostPerJobPost;
+  }
+  // Handle referral settings
+  if (body.referralSettings !== undefined) {
+    update.referralSettings = {};
+    if (body.referralSettings.isEnabled !== undefined) {
+      update["referralSettings.isEnabled"] = body.referralSettings.isEnabled;
+    }
+    if (body.referralSettings.referrerCoins !== undefined) {
+      update["referralSettings.referrerCoins"] = body.referralSettings.referrerCoins;
+    }
+    if (body.referralSettings.refereeCoins !== undefined) {
+      update["referralSettings.refereeCoins"] = body.referralSettings.refereeCoins;
+    }
+    if (body.referralSettings.maxReferralsPerUser !== undefined) {
+      update["referralSettings.maxReferralsPerUser"] = body.referralSettings.maxReferralsPerUser;
+    }
+    delete update.referralSettings; // Remove empty object, we use dot notation
   }
   return update;
 };
@@ -131,7 +154,7 @@ export const deleteCoinPackage = asyncHandler(async (req, res) => {
 
 export const updateCoinRules = asyncHandler(async (req, res) => {
   const { category } = req.params;
-  const { baseAmount, baseCoins, coinCostPerApplication, coinPerEmployeeCount, coinCostPerJobPost } = req.body;
+  const { baseAmount, baseCoins, coinCostPerApplication, coinPerEmployeeCount, coinCostPerJobPost, referralSettings } = req.body;
 
   console.log(`[COIN_RULES_UPDATE] Category: ${category}`);
   console.log(`[COIN_RULES_UPDATE] Request Body:`, req.body);
@@ -151,6 +174,25 @@ export const updateCoinRules = asyncHandler(async (req, res) => {
   if (coinCostPerApplication !== undefined) rule.coinCostPerApplication = coinCostPerApplication;
   if (coinPerEmployeeCount !== undefined) rule.coinPerEmployeeCount = coinPerEmployeeCount;
   if (coinCostPerJobPost !== undefined) rule.coinCostPerJobPost = coinCostPerJobPost;
+
+  // Update referral settings
+  if (referralSettings !== undefined) {
+    if (!rule.referralSettings) {
+      rule.referralSettings = {};
+    }
+    if (referralSettings.isEnabled !== undefined) {
+      rule.referralSettings.isEnabled = referralSettings.isEnabled;
+    }
+    if (referralSettings.referrerCoins !== undefined) {
+      rule.referralSettings.referrerCoins = referralSettings.referrerCoins;
+    }
+    if (referralSettings.refereeCoins !== undefined) {
+      rule.referralSettings.refereeCoins = referralSettings.refereeCoins;
+    }
+    if (referralSettings.maxReferralsPerUser !== undefined) {
+      rule.referralSettings.maxReferralsPerUser = referralSettings.maxReferralsPerUser;
+    }
+  }
 
   // Save the rule
   await rule.save();
